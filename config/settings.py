@@ -185,9 +185,11 @@ if AWS_STORAGE_BUCKET_NAME:
     # Endpoint propio para buckets compatibles (Cloudflare R2, MinIO, etc.).
     AWS_S3_ENDPOINT_URL = os.getenv('AWS_S3_ENDPOINT_URL', '') or None
     AWS_S3_CUSTOM_DOMAIN = os.getenv('AWS_S3_CUSTOM_DOMAIN', '') or None
+    # R2 firma con s3v4; es tambien el default de AWS, asi que no estorba.
+    AWS_S3_SIGNATURE_VERSION = 's3v4'
     AWS_QUERYSTRING_AUTH = False        # las fotos son publicas, urls limpias
     AWS_S3_FILE_OVERWRITE = False       # no pisar un archivo con otro del mismo nombre
-    AWS_DEFAULT_ACL = None
+    AWS_DEFAULT_ACL = None              # R2 no maneja ACLs; se dejan sin definir
     AWS_S3_OBJECT_PARAMETERS = {'CacheControl': 'max-age=86400'}
 
     STORAGES['default'] = {'BACKEND': 'storages.backends.s3.S3Storage'}
