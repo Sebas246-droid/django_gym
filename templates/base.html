@@ -92,15 +92,17 @@
     </nav>
 
     <div class="lateral-pie">
-      <span class="avatar">{{ user.username.0|upper }}</span>
-      <span class="datos">
-        <strong>{{ user }}</strong>
-        <span>{{ user.rol }}</span>
-      </span>
+      <div class="lateral-usuario">
+        <span class="avatar">{{ user.username.0|upper }}</span>
+        <span class="datos">
+          <strong>{{ user }}</strong>
+          <span>{{ user.rol }}</span>
+        </span>
+      </div>
       <form action="{% url 'accounts:logout' %}" method="post">
         {% csrf_token %}
-        <button type="submit" class="btn btn-enlace" title="Cerrar sesion">
-          {% include 'core/_icono.html' with nombre='salir' %}
+        <button type="submit" class="btn btn-salir">
+          {% include 'core/_icono.html' with nombre='salir' %} Cerrar sesion
         </button>
       </form>
     </div>

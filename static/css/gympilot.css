@@ -132,10 +132,20 @@ button { font-family: inherit; }
   border-top: 1px solid var(--borde);
   padding-top: 12px;
   margin-top: 12px;
+}
+.lateral-usuario {
   display: flex;
   align-items: center;
   gap: 10px;
+  margin-bottom: 10px;
 }
+.btn-salir {
+  width: 100%;
+  justify-content: center;
+  color: var(--tinta-2);
+}
+.btn-salir svg { width: 16px; height: 16px; }
+.btn-salir:hover { background: var(--alerta-fondo); border-color: var(--alerta-borde); color: var(--alerta); }
 .avatar {
   width: 32px; height: 32px;
   border-radius: 50%;
