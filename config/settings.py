@@ -13,7 +13,11 @@ load_dotenv(BASE_DIR / '.env')
 
 SECRET_KEY = os.getenv('SECRET_KEY', 'django-insecure-dev-key-change-me')
 
-DEBUG = os.getenv('DEBUG', 'True') == 'True'
+ON_RAILWAY = bool(os.getenv('RAILWAY_ENVIRONMENT') or os.getenv('RAILWAY_PUBLIC_DOMAIN'))
+
+# En Railway el sitio es de produccion: DEBUG apagado por defecto (seguro),
+# salvo que se defina DEBUG=True a proposito. En local, encendido por defecto.
+DEBUG = os.getenv('DEBUG', 'False' if ON_RAILWAY else 'True') == 'True'
 
 ALLOWED_HOSTS = [
     h.strip()
@@ -25,14 +29,18 @@ CSRF_TRUSTED_ORIGINS = [
     o.strip() for o in os.getenv('CSRF_TRUSTED_ORIGINS', '').split(',') if o.strip()
 ]
 
+# Dominios propios del proyecto: se aceptan SIEMPRE, sin depender de variables
+# de entorno. El comodin (empezar con punto) cubre gym., www. y la raiz.
+ALLOWED_HOSTS.append('.vitafitt.org')
+CSRF_TRUSTED_ORIGINS.append('https://*.vitafitt.org')
+
 # En Railway todo el trafico entra por su proxy sobre dominios *.railway.app:
-# el propio dominio del servicio, y el host del healthcheck. El comodin de
-# Django (un valor que empieza con punto) cubre ambos y sus subdominios.
-if os.getenv('RAILWAY_ENVIRONMENT') or os.getenv('RAILWAY_PUBLIC_DOMAIN'):
+# el propio dominio del servicio y el host del healthcheck.
+if ON_RAILWAY:
     ALLOWED_HOSTS.append('.railway.app')
     CSRF_TRUSTED_ORIGINS.append('https://*.railway.app')
 
-# Dominio publico concreto del servicio (para CSRF con dominio propio a futuro).
+# Dominio publico concreto del servicio (por si Railway lo expone).
 RAILWAY_DOMAIN = os.getenv('RAILWAY_PUBLIC_DOMAIN', '')
 if RAILWAY_DOMAIN:
     ALLOWED_HOSTS.append(RAILWAY_DOMAIN)
