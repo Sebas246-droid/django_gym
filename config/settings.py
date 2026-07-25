@@ -219,6 +219,9 @@ MESSAGE_STORAGE = 'django.contrib.messages.storage.session.SessionStorage'
 if not DEBUG:
     SECURE_SSL_REDIRECT = True
     SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
+    # El healthcheck de Railway golpea la app por HTTP interno; sin esta
+    # excepcion, SECURE_SSL_REDIRECT le devuelve un 301 y el deploy falla.
+    SECURE_REDIRECT_EXEMPT = [r'^salud/$']
     SESSION_COOKIE_SECURE = True
     CSRF_COOKIE_SECURE = True
     SECURE_HSTS_SECONDS = 31536000
