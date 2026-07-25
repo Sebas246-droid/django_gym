@@ -1,0 +1,168 @@
+{% load static %}
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{{ gym.nombre }}</title>
+  <meta name="description" content="{{ gym.texto|truncatewords:30 }}">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap"
+        rel="stylesheet">
+  <link rel="stylesheet" href="{% static 'css/sitio.css' %}">
+  <style>
+    :root {
+      --acento: {{ gym.color_primario }};
+      --acento-rgb: {{ gym.color_primario_rgb }};
+      --acento-texto: {{ gym.color_primario_texto }};
+      --oscuro: {{ gym.color_secundario }};
+    }
+  </style>
+</head>
+<body>
+
+<header class="sitio-nav">
+  <div class="envoltura">
+    <a href="#inicio" class="sitio-marca">
+      {% if gym.logo %}<img src="{{ gym.logo.url }}" alt="">{% endif %}
+      {{ gym.nombre }}
+    </a>
+    <nav>
+      <a href="#inicio">Inicio</a>
+      {% if imagenes %}<a href="#galeria">Galeria</a>{% endif %}
+      {% if sucursales %}<a href="#sucursales">Sucursales</a>{% endif %}
+      <a href="#contacto">Contacto</a>
+      <a href="{% url 'accounts:login' %}" class="boton">Acceder</a>
+    </nav>
+  </div>
+</header>
+
+<section class="hero" id="inicio"
+         {% if gym.portada %}style="background-image:url('{{ gym.portada.url }}')"{% endif %}>
+  <div class="envoltura">
+    <h1>{{ gym.frase }}</h1>
+    <p class="entrada">{{ gym.texto }}</p>
+
+    <div class="hero-acciones">
+      {% if gym.whatsapp_url %}
+        <a href="{{ gym.whatsapp_url }}" target="_blank" rel="noopener" class="boton">
+          Escribenos por WhatsApp
+        </a>
+      {% endif %}
+      {% if sucursales %}
+        <a href="#sucursales" class="boton boton-linea">Ver sucursales</a>
+      {% endif %}
+    </div>
+
+    <div class="hero-cifras">
+      <div>
+        <div class="valor">{{ clientes_total }}+</div>
+        <div class="etiqueta">Clientes felices</div>
+      </div>
+      <div>
+        <div class="valor">{{ coaches_total }}+</div>
+        <div class="etiqueta">Coaches expertos</div>
+      </div>
+      <div>
+        <div class="valor">{{ entrenamientos_total }}+</div>
+        <div class="etiqueta">Programas fitness</div>
+      </div>
+    </div>
+  </div>
+</section>
+
+{% if imagenes %}
+<section class="seccion" id="galeria">
+  <div class="envoltura">
+    <h2>Nuestras <span>instalaciones</span></h2>
+    <p class="intro">Conoce el espacio donde vas a entrenar.</p>
+    <div class="galeria">
+      {% for img in imagenes %}
+        <figure>
+          <img src="{{ img.imagen.url }}" alt="{{ img.titulo }}" loading="lazy">
+          {% if img.titulo %}<figcaption>{{ img.titulo }}</figcaption>{% endif %}
+        </figure>
+      {% endfor %}
+    </div>
+  </div>
+</section>
+{% endif %}
+
+<section class="seccion seccion-oscura">
+  <div class="envoltura">
+    <blockquote class="cita">
+      El exito suele llegar a quienes estan demasiado ocupados para buscarlo.
+      <span class="autor">- Henry David Thoreau</span>
+    </blockquote>
+  </div>
+</section>
+
+{% if sucursales %}
+<section class="seccion" id="sucursales">
+  <div class="envoltura">
+    <h2>Nuestras <span>sucursales</span></h2>
+    <p class="intro">Encuentra la mas cercana a ti.</p>
+
+    <div class="sucursales">
+      {% for s in sucursales %}
+        <article class="sucursal">
+          {% if s.tiene_mapa %}
+            <iframe src="{{ s.mapa_embed_url }}" loading="lazy"
+                    title="Mapa de {{ s.nombre }}"></iframe>
+          {% endif %}
+          <div class="cuerpo">
+            <h3>{{ s.nombre }}</h3>
+            {% if s.direccion %}<p>{{ s.direccion }}</p>{% endif %}
+            {% if s.telefono %}<p>Tel. {{ s.telefono }}</p>{% endif %}
+            {% if s.responsable %}<p>Responsable: {{ s.responsable }}</p>{% endif %}
+            {% if s.tiene_mapa %}
+              <div class="enlaces">
+                <a href="{{ s.mapa_url }}" target="_blank" rel="noopener">Ver en el mapa</a>
+              </div>
+            {% endif %}
+          </div>
+        </article>
+      {% endfor %}
+    </div>
+  </div>
+</section>
+{% endif %}
+
+<section class="seccion seccion-oscura" id="contacto">
+  <div class="envoltura">
+    <h2>Ponte en <span>contacto</span></h2>
+    <div class="contacto-grid">
+      {% if gym.telefono %}
+        <div><h3>Telefono</h3><p>{{ gym.telefono }}</p></div>
+      {% endif %}
+      {% if gym.email %}
+        <div><h3>Correo</h3><p>{{ gym.email }}</p></div>
+      {% endif %}
+      {% if gym.whatsapp_url %}
+        <div>
+          <h3>WhatsApp</h3>
+          <p><a href="{{ gym.whatsapp_url }}" target="_blank" rel="noopener">Enviar mensaje</a></p>
+        </div>
+      {% endif %}
+      <div>
+        <h3>Sistema</h3>
+        <p><a href="{% url 'accounts:login' %}">Acceder al gimnasio</a></p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<footer class="envoltura pie">
+  <span>{{ gym.nombre }} &copy; {% now "Y" %}</span>
+  <span class="der">Powered by GymPilot</span>
+</footer>
+
+{% if gym.whatsapp_url %}
+  <a href="{{ gym.whatsapp_url }}" target="_blank" rel="noopener" class="whatsapp-flotante">
+    WhatsApp
+  </a>
+{% endif %}
+
+</body>
+</html>

@@ -1,0 +1,102 @@
+{% extends 'base.html' %}
+
+{% block title %}Venta #{{ venta.pk }} - GymPilot{% endblock %}
+{% block migas %}
+  / <a href="{% url 'ventas:venta_list' %}">Ventas</a> / <span>#{{ venta.pk }}</span>
+{% endblock %}
+{% block encabezado %}Venta #{{ venta.pk }}{% endblock %}
+
+{% block acciones %}
+  {% if venta.estado == 'borrador' %}
+    <form method="post" action="{% url 'ventas:venta_confirmar' venta.pk %}">
+      {% csrf_token %}
+      <button type="submit" class="btn btn-primario">Confirmar y cobrar</button>
+    </form>
+  {% endif %}
+  <a href="{% url 'ventas:venta_list' %}" class="btn">Volver</a>
+{% endblock %}
+
+{% block acciones_derecha %}
+  {% if venta.estado == 'confirmada' %}
+    <span class="pill pill-ok">Confirmada</span>
+  {% else %}
+    <span class="pill pill-aviso">Borrador</span>
+  {% endif %}
+{% endblock %}
+
+{% block content %}
+
+<div class="rejilla-detalle">
+
+  <div class="o-hoja">
+    <h2>Datos</h2>
+    <table class="o-lista">
+      <tbody>
+        <tr><th>Cliente</th><td>{{ venta.cliente|default:'Mostrador' }}</td></tr>
+        <tr><th>Sucursal</th><td>{{ venta.sucursal }}</td></tr>
+        <tr><th>Fecha</th><td>{{ venta.fecha|date:'d/m/Y H:i' }}</td></tr>
+        <tr><th>Metodo</th><td>{{ venta.get_metodo_pago_display }}</td></tr>
+        <tr><th>Usuario</th><td>{{ venta.usuario|default:'-' }}</td></tr>
+        <tr><th>Subtotal</th><td>{{ venta.subtotal }}</td></tr>
+        <tr><th>Descuento</th><td>{{ venta.descuento }}</td></tr>
+        <tr><th>Total</th><td><strong style="font-size:19px">{{ venta.total }}</strong></td></tr>
+      </tbody>
+    </table>
+
+    {% if venta.estado == 'borrador' %}
+      <h3>Agregar producto</h3>
+      <form method="post" action="{% url 'ventas:venta_detalle_create' venta.pk %}"
+            class="o-form">
+        {% csrf_token %}
+        {{ form.as_p }}
+        <button type="submit" class="btn">Agregar</button>
+      </form>
+    {% endif %}
+  </div>
+
+  <div class="o-hoja">
+    <h2>Productos</h2>
+    <table class="o-lista">
+      <thead>
+        <tr>
+          <th>Producto</th><th class="num">Cantidad</th><th class="num">Precio</th>
+          <th class="num">Subtotal</th><th class="acciones"></th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for d in detalles %}
+          <tr>
+            <td><strong>{{ d.producto }}</strong></td>
+            <td class="num">{{ d.cantidad }}</td>
+            <td class="num">{{ d.precio }}</td>
+            <td class="num">{{ d.subtotal }}</td>
+            <td class="acciones">
+              {% if venta.estado == 'borrador' %}
+                <form method="post"
+                      action="{% url 'ventas:venta_detalle_delete' venta.pk d.pk %}">
+                  {% csrf_token %}
+                  <button type="submit" class="btn-enlace">Quitar</button>
+                </form>
+              {% endif %}
+            </td>
+          </tr>
+        {% empty %}
+          <tr><td colspan="5" class="vacio">Sin productos. Agrega el primero.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+
+    {% if venta.estado == 'borrador' %}
+      <p class="texto-tenue" style="margin-top:14px">
+        Al confirmar se descuenta el stock de <strong>{{ venta.sucursal }}</strong>.
+        Si algun producto no alcanza, la venta no se confirma.
+      </p>
+    {% else %}
+      <p class="texto-tenue" style="margin-top:14px">
+        Venta confirmada: el inventario ya fue descontado.
+      </p>
+    {% endif %}
+  </div>
+
+</div>
+{% endblock %}

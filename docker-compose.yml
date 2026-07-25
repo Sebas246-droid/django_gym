@@ -1,0 +1,16 @@
+services:
+  db:
+    image: postgres:16
+    container_name: gympilot_db
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: gympilot
+      POSTGRES_USER: gympilot
+      POSTGRES_PASSWORD: gympilot
+    ports:
+      - "5432:5432"
+    volumes:
+      - gympilot_pgdata:/var/lib/postgresql/data
+
+volumes:
+  gympilot_pgdata:

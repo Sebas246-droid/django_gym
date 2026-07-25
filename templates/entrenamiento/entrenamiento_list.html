@@ -1,0 +1,44 @@
+{% extends 'base.html' %}
+
+{% block title %}Entrenamientos - GymPilot{% endblock %}
+{% block migas %}/ <span>Entrenamientos</span>{% endblock %}
+{% block encabezado %}Entrenamientos{% endblock %}
+
+{% block acciones %}
+  <a href="{% url 'entrenamiento:create' %}" class="btn btn-primario">Nuevo entrenamiento</a>
+{% endblock %}
+
+{% block content %}
+<div class="o-tabla-caja">
+  <table class="o-lista">
+    <thead>
+      <tr><th>Nombre</th><th>Descripcion</th><th>Material</th><th class="acciones"></th></tr>
+    </thead>
+    <tbody>
+      {% for e in entrenamientos %}
+        <tr>
+          <td><strong>{{ e.nombre }}</strong></td>
+          <td class="texto-tenue">{{ e.descripcion|default:'-'|truncatewords:16 }}</td>
+          <td>
+            {% if e.documento %}
+              <a href="{{ e.documento.url }}" class="pill pill-gris" target="_blank">Documento</a>
+            {% endif %}
+            {% if e.video %}
+              <a href="{{ e.video }}" class="pill pill-gris" target="_blank">Video</a>
+            {% endif %}
+            {% if not e.documento and not e.video %}
+              <span class="texto-tenue">-</span>
+            {% endif %}
+          </td>
+          <td class="acciones">
+            <a href="{% url 'entrenamiento:update' e.pk %}" class="btn-enlace">Editar</a>
+            <a href="{% url 'entrenamiento:delete' e.pk %}" class="btn-enlace">Baja</a>
+          </td>
+        </tr>
+      {% empty %}
+        <tr><td colspan="4" class="vacio">Sin entrenamientos.</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endblock %}

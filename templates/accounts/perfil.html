@@ -1,0 +1,21 @@
+{% extends 'base.html' %}
+
+{% block title %}Mi perfil - GymPilot{% endblock %}
+{% block migas %}/ <span>Mi perfil</span>{% endblock %}
+{% block encabezado %}Mi perfil{% endblock %}
+
+{% block content %}
+<div class="o-hoja o-hoja-angosta">
+  <table class="o-lista">
+    <tbody>
+      <tr><th>Usuario</th><td>{{ user.username }}</td></tr>
+      <tr><th>Nombre</th><td>{{ user.get_full_name|default:'-' }}</td></tr>
+      <tr><th>Correo</th><td>{{ user.email|default:'-' }}</td></tr>
+      <tr><th>Telefono</th><td>{{ user.telefono|default:'-' }}</td></tr>
+      <tr><th>Gimnasio</th><td>{{ user.gym|default:'Super administrador' }}</td></tr>
+      <tr><th>Sucursal</th><td>{{ user.sucursal|default:'-' }}</td></tr>
+      <tr><th>Rol</th><td><span class="pill pill-gris">{{ user.rol }}</span></td></tr>
+    </tbody>
+  </table>
+</div>
+{% endblock %}

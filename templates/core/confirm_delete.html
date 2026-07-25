@@ -1,0 +1,21 @@
+{% extends 'base.html' %}
+
+{% block title %}Dar de baja - GymPilot{% endblock %}
+{% block migas %}/ <span>Dar de baja</span>{% endblock %}
+{% block encabezado %}Dar de baja{% endblock %}
+
+{% block content %}
+<div class="o-hoja o-hoja-angosta">
+  <p>
+    El registro <strong>{{ object }}</strong> se marcara como inactivo.
+    No se elimina fisicamente: se conserva el historial.
+  </p>
+  <form method="post">
+    {% csrf_token %}
+    <div class="o-form-acciones">
+      <button type="submit" class="btn btn-peligro">Confirmar baja</button>
+      <a href="javascript:history.back()" class="btn">Cancelar</a>
+    </div>
+  </form>
+</div>
+{% endblock %}

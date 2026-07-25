@@ -1,0 +1,59 @@
+{% extends 'base.html' %}
+
+{% block title %}Compras - GymPilot{% endblock %}
+{% block migas %}/ <span>Compras</span>{% endblock %}
+{% block encabezado %}Compras{% endblock %}
+
+{% block acciones %}
+  <a href="{% url 'inventario:compra_create' %}" class="btn btn-primario">Nueva compra</a>
+  <a href="{% url 'inventario:inventario_list' %}" class="btn">Stock</a>
+{% endblock %}
+
+{% block content %}
+<div class="o-tabla-caja">
+  <table class="o-lista">
+    <thead>
+      <tr>
+        <th>#</th><th>Fecha</th><th>Proveedor</th><th>Sucursal</th>
+        <th class="num">Total</th><th>Estado</th><th>Usuario</th><th class="acciones"></th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for c in compras %}
+        <tr>
+          <td><a href="{% url 'inventario:compra_detail' c.pk %}"><strong>{{ c.pk }}</strong></a></td>
+          <td class="texto-tenue">{{ c.fecha|date:'d/m/Y H:i' }}</td>
+          <td>{{ c.proveedor }}</td>
+          <td class="texto-tenue">{{ c.sucursal }}</td>
+          <td class="num"><strong>{{ c.total }}</strong></td>
+          <td>
+            {% if c.estado == 'confirmada' %}
+              <span class="pill pill-ok">Confirmada</span>
+            {% else %}
+              <span class="pill pill-aviso">Borrador</span>
+            {% endif %}
+          </td>
+          <td class="texto-tenue">{{ c.usuario|default:'-' }}</td>
+          <td class="acciones">
+            <a href="{% url 'inventario:compra_detail' c.pk %}" class="btn-enlace">Abrir</a>
+          </td>
+        </tr>
+      {% empty %}
+        <tr><td colspan="8" class="vacio">Sin compras.</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+
+{% if is_paginated %}
+  <div class="o-paginacion">
+    {% if page_obj.has_previous %}
+      <a href="?page={{ page_obj.previous_page_number }}" class="btn">Anterior</a>
+    {% endif %}
+    <span>Pagina {{ page_obj.number }} de {{ paginator.num_pages }}</span>
+    {% if page_obj.has_next %}
+      <a href="?page={{ page_obj.next_page_number }}" class="btn">Siguiente</a>
+    {% endif %}
+  </div>
+{% endif %}
+{% endblock %}

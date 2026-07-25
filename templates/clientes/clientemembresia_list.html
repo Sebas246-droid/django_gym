@@ -1,0 +1,66 @@
+{% extends 'base.html' %}
+
+{% block title %}Ventas de membresia - GymPilot{% endblock %}
+{% block migas %}/ <span>Ventas de membresia</span>{% endblock %}
+{% block encabezado %}Ventas de membresia{% endblock %}
+
+{% block acciones %}
+  <a href="{% url 'clientes:clientemembresia_create' %}" class="btn btn-primario">Vender membresia</a>
+  <a href="{% url 'clientes:membresia_list' %}" class="btn">Catalogo</a>
+{% endblock %}
+
+{% block content %}
+<div class="o-tabla-caja">
+  <table class="o-lista">
+    <thead>
+      <tr>
+        <th>Fecha pago</th><th>Cliente</th><th>Membresia</th><th>Vigencia</th>
+        <th>Estado</th><th class="num">Precio</th><th class="num">Desc.</th>
+        <th class="num">Total</th><th>Metodo</th><th>Cobro</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for cm in ventas_membresia %}
+        <tr>
+          <td class="texto-tenue">{{ cm.fecha_pago|date:'d/m/Y H:i' }}</td>
+          <td>
+            <a href="{% url 'clientes:cliente_detail' cm.cliente.pk %}">
+              <strong>{{ cm.cliente }}</strong>
+            </a>
+          </td>
+          <td>{{ cm.membresia.nombre }}</td>
+          <td class="texto-tenue">{{ cm.inicio|date:'d/m/Y' }} al {{ cm.fin|date:'d/m/Y' }}</td>
+          <td>
+            {% if cm.estado == 'vigente' %}
+              <span class="pill pill-ok">Vigente</span>
+            {% elif cm.estado == 'vencida' %}
+              <span class="pill pill-gris">Vencida</span>
+            {% else %}
+              <span class="pill pill-alerta">Cancelada</span>
+            {% endif %}
+          </td>
+          <td class="num">{{ cm.precio }}</td>
+          <td class="num">{{ cm.descuento }}</td>
+          <td class="num"><strong>{{ cm.total }}</strong></td>
+          <td class="texto-tenue">{{ cm.get_metodo_pago_display }}</td>
+          <td class="texto-tenue">{{ cm.usuario|default:'-' }}</td>
+        </tr>
+      {% empty %}
+        <tr><td colspan="10" class="vacio">Sin registros.</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+
+{% if is_paginated %}
+  <div class="o-paginacion">
+    {% if page_obj.has_previous %}
+      <a href="?page={{ page_obj.previous_page_number }}" class="btn">Anterior</a>
+    {% endif %}
+    <span>Pagina {{ page_obj.number }} de {{ paginator.num_pages }}</span>
+    {% if page_obj.has_next %}
+      <a href="?page={{ page_obj.next_page_number }}" class="btn">Siguiente</a>
+    {% endif %}
+  </div>
+{% endif %}
+{% endblock %}

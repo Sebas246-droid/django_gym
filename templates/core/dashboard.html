@@ -1,0 +1,264 @@
+{% extends 'base.html' %}
+{% load l10n %}
+
+{% block title %}Tablero - GymPilot{% endblock %}
+{% block migas %}/ <span>Tablero</span>{% endblock %}
+{% block encabezado %}Hola, {{ user.first_name|default:user.username }}{% endblock %}
+
+{% block acciones %}
+  <a href="{% url 'ventas:pos' %}" class="btn btn-primario">Punto de venta</a>
+  <a href="{% url 'clientes:clientemembresia_create' %}" class="btn">Vender membresia</a>
+  <a href="{% url 'clientes:checkin' %}" class="btn">Kiosco</a>
+{% endblock %}
+
+{% block content %}
+
+{# ---------- Encabezado: el dinero y quien esta dentro ---------- #}
+<section class="hero-tablero">
+
+  <div class="hero-dinero">
+    <span class="rotulo">Ingresos de hoy</span>
+    <div class="cifra">{{ ingresos_hoy|floatformat:0 }}</div>
+
+    <div class="hero-chips">
+      <span class="chip">
+        <i class="punto punto-claro"></i>
+        Membresias {{ ingreso_membresias|floatformat:0 }}
+        <b>{{ membresias_vendidas_hoy }}</b>
+      </span>
+      <span class="chip">
+        <i class="punto punto-tenue"></i>
+        Productos {{ ingreso_productos|floatformat:0 }}
+        <b>{{ ventas_hoy }}</b>
+      </span>
+    </div>
+
+    <div class="hero-semana">
+      <div class="mini-barras">
+        {% for b in barras_ingreso %}
+          <span class="mini-barra {% if b.hoy %}es-hoy{% endif %}"
+                style="height:{{ b.alto }}%"
+                title="{{ b.dia|date:'D j' }}: {{ b.monto|floatformat:0 }}"></span>
+        {% endfor %}
+      </div>
+      <span class="hero-pie">
+        Ultimos 7 dias <b>{{ ingreso_semana|floatformat:0 }}</b>
+      </span>
+    </div>
+  </div>
+
+  <div class="hero-lado">
+    <div class="o-hoja tarjeta-vivo">
+      <span class="vivo"><i></i> En el gimnasio ahora</span>
+      <div class="cifra-vivo">{{ dentro_ahora }}</div>
+      <p class="texto-tenue mt0">
+        {{ asistencias_hoy }} entrada{{ asistencias_hoy|pluralize:"s" }} hoy
+        {% if variacion_entradas > 0 %}
+          &middot; <span class="delta delta-sube">+{{ variacion_entradas }} vs ayer</span>
+        {% elif variacion_entradas < 0 %}
+          &middot; <span class="delta delta-baja">{{ variacion_entradas }} vs ayer</span>
+        {% else %}
+          &middot; igual que ayer
+        {% endif %}
+      </p>
+    </div>
+
+    <div class="o-hoja tarjeta-salud">
+      <div class="salud-cabecera">
+        <h2 class="mt0">Salud de la cartera</h2>
+        <span class="pill {% if salud.cobertura >= 70 %}pill-ok{% elif salud.cobertura >= 40 %}pill-aviso{% else %}pill-alerta{% endif %}">
+          {{ salud.cobertura }}% con membresia
+        </span>
+      </div>
+
+      {# Los porcentajes van sin localizar: en CSS la coma decimal no es valida #}
+      <div class="barra-apilada">
+        <span class="tramo tramo-ok" style="width:{{ salud.al_corriente|unlocalize }}%"></span>
+        <span class="tramo tramo-aviso" style="width:{{ salud.por_vencer|unlocalize }}%"></span>
+        <span class="tramo tramo-alerta" style="width:{{ salud.sin_membresia|unlocalize }}%"></span>
+      </div>
+
+      <ul class="leyenda">
+        <li><i class="punto punto-ok"></i> Al corriente <b>{{ al_corriente }}</b></li>
+        <li><i class="punto punto-aviso"></i> Por vencer <b>{{ por_vencer_total }}</b></li>
+        <li><i class="punto punto-alerta"></i> Sin membresia <b>{{ sin_membresia }}</b></li>
+      </ul>
+    </div>
+  </div>
+
+</section>
+
+{# ---------- Grafica de asistencia ---------- #}
+<section class="o-hoja panel-grafica">
+  <div class="grafica-cabecera">
+    <div>
+      <h2 class="mt0">Entradas de la semana</h2>
+      <p class="texto-tenue mt0">Maximo del periodo: {{ grafica.tope }} entradas en un dia.</p>
+    </div>
+    <div class="grafica-cifra">
+      <span class="valor">{{ asistencias_hoy }}</span>
+      <span class="texto-tenue">hoy</span>
+    </div>
+  </div>
+
+  {% comment %}
+    El locale escribe los decimales con coma y el SVG los leeria como dos
+    coordenadas distintas: aqui los numeros van sin localizar.
+  {% endcomment %}
+  {% localize off %}
+  <svg class="grafica" viewBox="0 0 {{ grafica.ancho }} {{ grafica.alto }}"
+       role="img" aria-label="Entradas de los ultimos siete dias">
+    <defs>
+      <linearGradient id="relleno" x1="0" y1="0" x2="0" y2="1">
+        <stop offset="0%" stop-color="var(--acento)" stop-opacity=".26"/>
+        <stop offset="100%" stop-color="var(--acento)" stop-opacity="0"/>
+      </linearGradient>
+    </defs>
+
+    <line x1="0" y1="{{ grafica.piso }}" x2="{{ grafica.ancho }}" y2="{{ grafica.piso }}"
+          class="eje"/>
+    <polygon points="{{ grafica.area }}" fill="url(#relleno)"/>
+    <polyline points="{{ grafica.linea }}" class="trazo"/>
+
+    {% for p in grafica.puntos %}
+      <circle cx="{{ p.x }}" cy="{{ p.y }}" r="{% if p.hoy %}6{% else %}4{% endif %}"
+              class="nodo {% if p.hoy %}nodo-hoy{% endif %}"/>
+      <text x="{{ p.x }}" y="{{ p.y|add:'-16' }}" class="nodo-valor">{{ p.valor }}</text>
+      <text x="{{ p.x }}" y="244" class="nodo-dia">{{ p.dia|date:'D' }}</text>
+    {% endfor %}
+  </svg>
+  {% endlocalize %}
+</section>
+
+{# ---------- Lo que pide accion, en dos columnas parejas ---------- #}
+<div class="rejilla-tablero">
+
+  <div class="o-hoja tarjeta-atencion">
+    <h2>Requiere tu atencion</h2>
+
+    <div class="bloque">
+      <div class="bloque-titulo">
+        <span>Membresias por vencer</span>
+        <span class="pill {% if por_vencer_total %}pill-aviso{% else %}pill-gris{% endif %}">
+          {{ por_vencer_total }}
+        </span>
+      </div>
+      {% if por_vencer %}
+        <ul class="fila-lista">
+          {% for cm in por_vencer %}
+            <li>
+              <a href="{% url 'clientes:cliente_detail' cm.cliente.pk %}" class="quien">
+                {{ cm.cliente.nombre }}
+              </a>
+              <span class="texto-tenue">{{ cm.membresia.nombre }}</span>
+              <span class="pill pill-aviso">{{ cm.fin|date:'d/m' }}</span>
+              <a class="btn-enlace"
+                 href="{% url 'clientes:clientemembresia_create' %}?cliente={{ cm.cliente.pk }}">
+                Renovar
+              </a>
+            </li>
+          {% endfor %}
+        </ul>
+      {% else %}
+        <p class="nota-vacia">Ninguna vence en los proximos 7 dias.</p>
+      {% endif %}
+    </div>
+
+    <div class="bloque">
+      <div class="bloque-titulo">
+        <span>Sin venir hace 14 dias</span>
+        <span class="pill {% if ausentes %}pill-alerta{% else %}pill-gris{% endif %}">
+          {{ ausentes }}
+        </span>
+      </div>
+      {% if ausentes_lista %}
+        <ul class="fila-lista">
+          {% for c in ausentes_lista %}
+            <li>
+              <a href="{% url 'clientes:cliente_detail' c.pk %}" class="quien">{{ c.nombre }}</a>
+              <span class="texto-tenue">{{ c.telefono|default:'sin telefono' }}</span>
+              {% if c.telefono %}
+                <a class="btn-enlace" href="tel:{{ c.telefono }}">Llamar</a>
+              {% endif %}
+            </li>
+          {% endfor %}
+        </ul>
+        {% if ausentes > 4 %}
+          <a href="{% url 'clientes:cliente_list' %}" class="ver-mas">
+            Ver los {{ ausentes }} en clientes
+          </a>
+        {% endif %}
+      {% else %}
+        <p class="nota-vacia">Todos han venido estas dos semanas.</p>
+      {% endif %}
+    </div>
+
+    <div class="bloque">
+      <div class="bloque-titulo">
+        <span>Stock bajo minimo</span>
+        <span class="pill {% if stock_bajo_total %}pill-alerta{% else %}pill-gris{% endif %}">
+          {{ stock_bajo_total }}
+        </span>
+      </div>
+      {% if stock_bajo %}
+        <ul class="fila-lista">
+          {% for inv in stock_bajo %}
+            <li>
+              <span class="quien">{{ inv.producto.nombre }}</span>
+              <span class="texto-tenue">{{ inv.sucursal.nombre }}</span>
+              <span class="pill pill-alerta">{{ inv.stock }} / min {{ inv.stock_minimo }}</span>
+            </li>
+          {% endfor %}
+        </ul>
+        <a href="{% url 'inventario:compra_create' %}" class="ver-mas">Registrar compra</a>
+      {% else %}
+        <p class="nota-vacia">Todo en orden con las existencias.</p>
+      {% endif %}
+    </div>
+  </div>
+
+  <div class="columna-lado">
+
+    <div class="o-hoja tarjeta-actividad">
+      <h2>Accesos de hoy</h2>
+      {% if ultimos_accesos %}
+        <ul class="linea-tiempo">
+          {% for a in ultimos_accesos %}
+            <li class="{% if a.tipo == 'entrada' %}es-entrada{% else %}es-salida{% endif %}">
+              <span class="momento">{{ a.fecha_hora|time:'H:i' }}</span>
+              <span class="quien">
+                <a href="{% url 'clientes:cliente_detail' a.cliente.pk %}">{{ a.cliente.nombre }}</a>
+                <b>{{ a.cliente.numero_usuario }}</b>
+              </span>
+              <span class="que">{{ a.get_tipo_display }}</span>
+            </li>
+          {% endfor %}
+        </ul>
+      {% else %}
+        <p class="nota-vacia">Todavia no hay accesos hoy.</p>
+      {% endif %}
+      <a href="{% url 'clientes:asistencia_list' %}" class="btn pie-tarjeta">Ver historial</a>
+    </div>
+
+    <div class="o-hoja">
+      <h2>Lo mas vendido del mes</h2>
+      {% if top_productos %}
+        <ul class="ranking">
+          {% for fila in top_productos %}
+            <li>
+              <span class="etiqueta">{{ fila.producto__nombre }}</span>
+              <span class="pista"><i style="width:{{ fila.ancho }}%"></i></span>
+              <span class="cifra">{{ fila.piezas }}</span>
+            </li>
+          {% endfor %}
+        </ul>
+      {% else %}
+        <p class="nota-vacia">Sin ventas de productos este mes.</p>
+      {% endif %}
+      <a href="{% url 'ventas:pos' %}" class="btn pie-tarjeta">Abrir punto de venta</a>
+    </div>
+
+  </div>
+
+</div>
+{% endblock %}

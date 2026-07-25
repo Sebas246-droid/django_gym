@@ -1,0 +1,73 @@
+{% extends 'base.html' %}
+
+{% block title %}Clientes - GymPilot{% endblock %}
+{% block migas %}/ <span>Clientes</span>{% endblock %}
+{% block encabezado %}Clientes{% endblock %}
+
+{% block acciones %}
+  <a href="{% url 'clientes:cliente_create' %}" class="btn btn-primario">Nuevo cliente</a>
+{% endblock %}
+
+{% block acciones_derecha %}
+  <form method="get" class="o-filtros">
+    <input type="text" name="q" value="{{ q }}" placeholder="Numero, nombre, telefono o correo">
+    <button type="submit" class="btn">Buscar</button>
+    {% if q %}<a href="{% url 'clientes:cliente_list' %}" class="btn">Limpiar</a>{% endif %}
+  </form>
+{% endblock %}
+
+{% block content %}
+<div class="o-tabla-caja">
+  <table class="o-lista">
+    <thead>
+      <tr>
+        <th>Numero</th><th>Nombre</th><th>Telefono</th>
+        <th>Sucursal</th><th>Membresia</th><th class="acciones"></th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for cliente in clientes %}
+        <tr>
+          <td><span class="numero-socio">{{ cliente.numero_usuario }}</span></td>
+          <td>
+            <a href="{% url 'clientes:cliente_detail' cliente.pk %}">
+              <strong>{{ cliente.nombre }}</strong>
+            </a>
+          </td>
+          <td>{{ cliente.telefono|default:'-' }}</td>
+          <td class="texto-tenue">{{ cliente.sucursal }}</td>
+          <td>
+            {% with vigente=cliente.membresia_vigente %}
+              {% if vigente %}
+                <span class="pill pill-ok">Vigente al {{ vigente.fin|date:'d/m/Y' }}</span>
+              {% else %}
+                <span class="pill pill-alerta">Sin membresia</span>
+              {% endif %}
+            {% endwith %}
+          </td>
+          <td class="acciones">
+            <a href="{% url 'clientes:cliente_update' cliente.pk %}" class="btn-enlace">Editar</a>
+            <a href="{% url 'clientes:clientemembresia_create' %}?cliente={{ cliente.pk }}"
+               class="btn-enlace">Vender</a>
+            <a href="{% url 'clientes:cliente_delete' cliente.pk %}" class="btn-enlace">Baja</a>
+          </td>
+        </tr>
+      {% empty %}
+        <tr><td colspan="6" class="vacio">Sin clientes.</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+
+{% if is_paginated %}
+  <div class="o-paginacion">
+    {% if page_obj.has_previous %}
+      <a href="?q={{ q }}&page={{ page_obj.previous_page_number }}" class="btn">Anterior</a>
+    {% endif %}
+    <span>Pagina {{ page_obj.number }} de {{ paginator.num_pages }}</span>
+    {% if page_obj.has_next %}
+      <a href="?q={{ q }}&page={{ page_obj.next_page_number }}" class="btn">Siguiente</a>
+    {% endif %}
+  </div>
+{% endif %}
+{% endblock %}

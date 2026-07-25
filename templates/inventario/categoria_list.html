@@ -1,0 +1,35 @@
+{% extends 'base.html' %}
+
+{% block title %}Categorias - GymPilot{% endblock %}
+{% block migas %}/ <span>Categorias</span>{% endblock %}
+{% block encabezado %}Categorias de producto{% endblock %}
+
+{% block acciones %}
+  <a href="{% url 'inventario:categoria_create' %}" class="btn btn-primario">Nueva categoria</a>
+  <a href="{% url 'inventario:producto_list' %}" class="btn">Productos</a>
+{% endblock %}
+
+{% block content %}
+<div class="o-tabla-caja">
+  <table class="o-lista">
+    <thead>
+      <tr><th>Nombre</th><th>Descripcion</th><th class="num">Productos</th><th class="acciones"></th></tr>
+    </thead>
+    <tbody>
+      {% for c in categorias %}
+        <tr>
+          <td><strong>{{ c.nombre }}</strong></td>
+          <td class="texto-tenue">{{ c.descripcion|default:'-' }}</td>
+          <td class="num">{{ c.productos.count }}</td>
+          <td class="acciones">
+            <a href="{% url 'inventario:categoria_update' c.pk %}" class="btn-enlace">Editar</a>
+            <a href="{% url 'inventario:categoria_delete' c.pk %}" class="btn-enlace">Baja</a>
+          </td>
+        </tr>
+      {% empty %}
+        <tr><td colspan="4" class="vacio">Sin categorias.</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endblock %}

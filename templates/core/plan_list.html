@@ -1,0 +1,46 @@
+{% extends 'base.html' %}
+
+{% block title %}Planes - GymPilot{% endblock %}
+{% block migas %}/ <span>Planes</span>{% endblock %}
+{% block encabezado %}Planes del SaaS{% endblock %}
+
+{% block acciones %}
+  <a href="{% url 'core:plan_create' %}" class="btn btn-primario">Nuevo plan</a>
+{% endblock %}
+
+{% block content %}
+<div class="o-tabla-caja">
+  <table class="o-lista">
+    <thead>
+      <tr>
+        <th>Nombre</th><th class="num">Precio</th><th class="num">Usuarios</th>
+        <th class="num">Clientes</th><th class="num">Sucursales</th>
+        <th>Estado</th><th class="acciones"></th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for plan in planes %}
+        <tr class="{% if not plan.activo %}inactiva{% endif %}">
+          <td><strong>{{ plan.nombre }}</strong></td>
+          <td class="num">{{ plan.precio }}</td>
+          <td class="num">{{ plan.usuarios_max }}</td>
+          <td class="num">{{ plan.clientes_max }}</td>
+          <td class="num">{{ plan.sucursales_max }}</td>
+          <td>
+            {% if plan.activo %}
+              <span class="pill pill-ok">Activo</span>
+            {% else %}
+              <span class="pill pill-gris">Inactivo</span>
+            {% endif %}
+          </td>
+          <td class="acciones">
+            <a href="{% url 'core:plan_update' plan.pk %}" class="btn-enlace">Editar</a>
+          </td>
+        </tr>
+      {% empty %}
+        <tr><td colspan="7" class="vacio">Sin planes.</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endblock %}

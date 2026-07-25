@@ -1,0 +1,33 @@
+{% load static %}
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Entrar - GymPilot</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap"
+        rel="stylesheet">
+  <link rel="stylesheet" href="{% static 'css/gympilot.css' %}">
+</head>
+<body>
+<div class="o-login-fondo">
+  <div class="o-login">
+    <div class="insignia">G</div>
+    <h1>Bienvenido de vuelta</h1>
+    <p class="sub">Entra con tu usuario del gimnasio.</p>
+
+    {% if form.errors %}
+      <div class="o-mensaje error">Usuario o contrasena incorrectos.</div>
+    {% endif %}
+
+    <form method="post" class="o-form">
+      {% csrf_token %}
+      {{ form.as_p }}
+      <button type="submit" class="btn btn-primario btn-grande">Entrar</button>
+    </form>
+  </div>
+</div>
+</body>
+</html>

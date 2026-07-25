@@ -1,0 +1,125 @@
+{% extends 'base.html' %}
+
+{% block title %}Sitio web - GymPilot{% endblock %}
+{% block migas %}/ <span>Sitio web</span>{% endblock %}
+{% block encabezado %}Sitio web del gimnasio{% endblock %}
+
+{% block acciones_derecha %}
+  <a href="{% url 'core:landing' gym_actual.slug %}" target="_blank" class="btn">
+    Ver pagina publica
+  </a>
+{% endblock %}
+
+{% block content %}
+
+<div class="o-hoja o-hoja-angosta">
+  <h2>Apariencia y contenido</h2>
+
+  <form method="post" enctype="multipart/form-data" class="o-form" id="form-sitio">
+    {% csrf_token %}
+
+    <h3>Paletas rapidas</h3>
+    <div class="o-filtros" style="gap:10px">
+      {% for primario, secundario, nombre in paletas %}
+        <button type="button" class="btn paleta"
+                data-primario="{{ primario }}" data-secundario="{{ secundario }}"
+                title="{{ nombre }}">
+          <span style="display:inline-block;width:14px;height:14px;border-radius:3px;
+                       background:{{ primario }};vertical-align:-2px;margin-right:6px"></span>
+          <span style="display:inline-block;width:14px;height:14px;border-radius:3px;
+                       background:{{ secundario }};vertical-align:-2px;margin-right:8px;
+                       border:1px solid #ccc"></span>{{ nombre }}
+        </button>
+      {% endfor %}
+    </div>
+
+    <h3>Detalle</h3>
+    {{ form.as_p }}
+
+    <div class="o-form-acciones">
+      <button type="submit" class="btn btn-primario">Guardar cambios</button>
+      <a href="{% url 'core:landing' gym_actual.slug %}" target="_blank" class="btn">Previsualizar</a>
+    </div>
+  </form>
+</div>
+
+<div class="o-hoja o-hoja-angosta">
+  <h2>Galeria de imagenes</h2>
+  <p class="texto-tenue mt0">Las fotos que subas aqui se muestran en la pagina publica.</p>
+
+  <form method="post" action="{% url 'core:sitio_imagen_create' %}"
+        enctype="multipart/form-data" class="o-form">
+    {% csrf_token %}
+    {{ imagen_form.as_p }}
+    <button type="submit" class="btn btn-primario">Subir imagen</button>
+  </form>
+
+  <h3>Imagenes publicadas ({{ imagenes|length }})</h3>
+  {% if imagenes %}
+    <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(160px,1fr));gap:12px">
+      {% for img in imagenes %}
+        <div style="border:1px solid var(--borde);border-radius:6px;overflow:hidden">
+          <img src="{{ img.imagen.url }}" alt="{{ img.titulo }}"
+               style="width:100%;height:110px;object-fit:cover;display:block">
+          <div style="padding:8px 10px">
+            <div style="font-size:12px;font-weight:600">{{ img.titulo|default:'Sin titulo' }}</div>
+            <div class="texto-tenue" style="font-size:11px">Orden {{ img.orden }}</div>
+            <form method="post" action="{% url 'core:sitio_imagen_delete' img.pk %}">
+              {% csrf_token %}
+              <button type="submit" class="btn btn-peligro" style="margin-top:6px;font-size:12px">
+                Quitar
+              </button>
+            </form>
+          </div>
+        </div>
+      {% endfor %}
+    </div>
+  {% else %}
+    <p class="o-vacio">Aun no hay imagenes. Sube la primera para darle vida al sitio.</p>
+  {% endif %}
+</div>
+
+<div class="o-hoja o-hoja-angosta">
+  <h2>Sucursales en el mapa</h2>
+  <p class="texto-tenue mt0">
+    Captura latitud y longitud en cada sucursal para que aparezca su mapa en la pagina publica.
+  </p>
+  <table class="o-lista">
+    <thead>
+      <tr><th>Sucursal</th><th>Direccion</th><th>Coordenadas</th><th class="acciones"></th></tr>
+    </thead>
+    <tbody>
+      {% for s in gym_actual.sucursales.all %}
+        {% if s.activo %}
+          <tr>
+            <td><strong>{{ s.nombre }}</strong></td>
+            <td>{{ s.direccion|default:'-' }}</td>
+            <td>
+              {% if s.tiene_mapa %}
+                <span class="pill pill-ok">{{ s.latitud }}, {{ s.longitud }}</span>
+              {% else %}
+                <span class="pill pill-gris">Sin ubicacion</span>
+              {% endif %}
+            </td>
+            <td class="acciones">
+              <a href="{% url 'core:sucursal_update' s.pk %}" class="btn-enlace">Editar</a>
+            </td>
+          </tr>
+        {% endif %}
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+
+{% endblock %}
+
+{% block extra_js %}
+<script>
+  document.querySelectorAll('.paleta').forEach(function (boton) {
+    boton.addEventListener('click', function () {
+      document.querySelector('#id_color_primario').value = boton.dataset.primario;
+      document.querySelector('#id_color_secundario').value = boton.dataset.secundario;
+    });
+  });
+</script>
+{% endblock %}

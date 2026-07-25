@@ -1,0 +1,21 @@
+{% extends 'base.html' %}
+
+{% block title %}{{ titulo|default:'Formulario' }} - GymPilot{% endblock %}
+{% block migas %}/ <span>{{ titulo|default:'Formulario' }}</span>{% endblock %}
+{% block encabezado %}{{ titulo|default:'Formulario' }}{% endblock %}
+
+{% block content %}
+<div class="o-hoja o-hoja-angosta">
+  <form method="post" enctype="multipart/form-data" class="o-form">
+    {% csrf_token %}
+    {% if form.non_field_errors %}
+      <div class="o-mensaje error">{{ form.non_field_errors }}</div>
+    {% endif %}
+    {{ form.as_p }}
+    <div class="o-form-acciones">
+      <button type="submit" class="btn btn-primario">Guardar</button>
+      <a href="javascript:history.back()" class="btn">Cancelar</a>
+    </div>
+  </form>
+</div>
+{% endblock %}

@@ -1,0 +1,278 @@
+{% load static %}
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
+  <title>Acceso - {{ gym_actual.nombre }}</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap"
+        rel="stylesheet">
+  <link rel="stylesheet" href="{% static 'css/kiosco.css' %}">
+  <style>
+    :root {
+      --acento: {{ gym_actual.color_primario }};
+      --acento-rgb: {{ gym_actual.color_primario_rgb }};
+      --acento-texto: {{ gym_actual.color_primario_texto }};
+    }
+  </style>
+</head>
+<body>
+
+<div class="fondo" {% if gym_actual.portada %}style="background-image:url('{{ gym_actual.portada.url }}')"{% endif %}></div>
+
+<div class="esquina">
+  <div class="hora" id="reloj">--:--</div>
+  <div class="fecha">{% now "l j \d\e F" %}</div>
+  {% if not buscando %}
+    <button type="button" class="ayuda"
+            onclick="location.href='{% url 'clientes:checkin' %}?buscar=1'">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9"
+           stroke-linecap="round" stroke-linejoin="round">
+        <circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/>
+      </svg>
+      No recuerdo mi numero
+    </button>
+  {% endif %}
+</div>
+
+<div class="escena">
+
+  {% if resultado %}
+    {# ---------- Veredicto del acceso ---------- #}
+    <div class="tarjeta resultado
+      {% if resultado.estado == 'ok' %}estado-ok
+      {% elif resultado.estado == 'aviso' %}estado-aviso
+      {% else %}estado-alerta{% endif %}">
+
+      {% if resultado.nombre %}
+        {# Foto del cliente con el veredicto como distintivo encima #}
+        <div class="retrato">
+          {% if resultado.foto %}
+            <img src="{{ resultado.foto }}" alt="{{ resultado.nombre }}">
+          {% else %}
+            <span class="inicial">{{ resultado.inicial }}</span>
+          {% endif %}
+          <span class="distintivo">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                 stroke-linecap="round" stroke-linejoin="round">
+              {% if resultado.estado == 'ok' %}
+                <path d="M20 6 9 17l-5-5"/>
+              {% elif resultado.estado == 'aviso' %}
+                <path d="M12 8v5"/><path d="M12 17h.01"/><circle cx="12" cy="12" r="9"/>
+              {% else %}
+                <path d="M18 6 6 18"/><path d="m6 6 12 12"/>
+              {% endif %}
+            </svg>
+          </span>
+        </div>
+      {% else %}
+        <div class="marca-estado">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"
+               stroke-linecap="round" stroke-linejoin="round">
+            <path d="M18 6 6 18"/><path d="m6 6 12 12"/>
+          </svg>
+        </div>
+      {% endif %}
+
+      <p class="veredicto">{{ resultado.titulo }}</p>
+
+      {% if resultado.nombre %}
+        <p class="persona">{{ resultado.nombre }}</p>
+        <p class="meta">
+          {{ resultado.numero }}{% if resultado.tipo %} &middot; {{ resultado.tipo }} {{ resultado.hora }}{% endif %}
+        </p>
+      {% endif %}
+
+      <p class="nota">{{ resultado.mensaje }}</p>
+      {% if resultado.detalle %}<p class="nota nota-tenue">{{ resultado.detalle }}</p>{% endif %}
+
+      {% if entrenamientos and resultado.asistencia_id %}
+        <div class="paso-dos">
+          <p class="pregunta">Que vas a entrenar hoy</p>
+          <p class="pista">Opcional. Si no eliges, tu entrada ya quedo registrada.</p>
+          <form method="post"
+                action="{% url 'clientes:asistencia_entrenamiento' resultado.asistencia_id %}"
+                class="opciones">
+            {% csrf_token %}
+            {% for e in entrenamientos %}
+              <button type="submit" name="entrenamiento" value="{{ e.pk }}">{{ e.nombre }}</button>
+            {% endfor %}
+          </form>
+        </div>
+      {% endif %}
+
+      <div class="barra-tiempo"><i style="animation-duration:{{ segundos }}s"></i></div>
+      <button type="button" class="secundario" onclick="location.href='{% url 'clientes:checkin' %}'">
+        Siguiente persona
+      </button>
+    </div>
+
+  {% elif buscando %}
+    {# ---------- Busqueda de numero ---------- #}
+    <div class="tarjeta">
+      <div class="identidad">
+        <span class="insignia">
+          {% if gym_actual.logo %}<img src="{{ gym_actual.logo.url }}" alt="">
+          {% else %}{{ gym_actual.nombre.0|upper }}{% endif %}
+        </span>
+        <span class="nombre">{{ gym_actual.nombre }}</span>
+      </div>
+
+      <h1 class="titulo">Busca tu numero</h1>
+      <p class="subtitulo">Escribe tu nombre o telefono.</p>
+
+      <form method="get" class="buscador">
+        <input type="hidden" name="buscar" value="1">
+        <input type="text" name="q" value="{{ q }}" placeholder="Nombre o telefono" autofocus>
+      </form>
+
+      {% if q %}
+        <ul class="coincidencias">
+          {% for c in coincidencias %}
+            <li>
+              <form method="post">
+                {% csrf_token %}
+                <input type="hidden" name="numero_usuario" value="{{ c.numero_usuario }}">
+                <button type="submit">
+                  <span class="num">{{ c.numero_usuario }}</span> {{ c.nombre }}
+                </button>
+              </form>
+            </li>
+          {% empty %}
+            <li class="sin-datos">Sin coincidencias. Pregunta en recepcion.</li>
+          {% endfor %}
+        </ul>
+      {% endif %}
+
+      <button type="button" class="secundario"
+              onclick="location.href='{% url 'clientes:checkin' %}'">
+        Volver al teclado
+      </button>
+    </div>
+
+  {% else %}
+    {# ---------- Teclado ---------- #}
+    <form method="post" class="tarjeta" id="form-acceso">
+      {% csrf_token %}
+
+      <div class="identidad">
+        <span class="insignia">
+          {% if gym_actual.logo %}<img src="{{ gym_actual.logo.url }}" alt="">
+          {% else %}{{ gym_actual.nombre.0|upper }}{% endif %}
+        </span>
+        <span class="nombre">{{ gym_actual.nombre }}</span>
+      </div>
+
+      <h1 class="titulo">Registra tu entrada</h1>
+      <p class="subtitulo">Teclea tu numero de usuario.</p>
+
+      <input type="text" name="numero_usuario" id="numero" inputmode="none"
+             maxlength="{{ digitos }}" autocomplete="off" autofocus>
+
+      <div class="casillas" id="casillas">
+        {% for _ in digitos_rango %}<span class="casilla"></span>{% endfor %}
+      </div>
+
+      <div class="teclado">
+        {% for n in "123456789" %}
+          <button type="button" class="tecla" data-valor="{{ n }}">{{ n }}</button>
+        {% endfor %}
+        <button type="button" class="suave" id="limpiar">Limpiar</button>
+        <button type="button" class="tecla" data-valor="0">0</button>
+        <button type="button" class="suave" id="borrar" aria-label="Borrar">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"
+               stroke-linecap="round" stroke-linejoin="round">
+            <path d="M20 5H9l-6 7 6 7h11a1 1 0 0 0 1-1V6a1 1 0 0 0-1-1z"/>
+            <path d="m17 9-5 5"/><path d="m12 9 5 5"/>
+          </svg>
+        </button>
+      </div>
+
+      <button type="submit" class="principal-btn" id="enviar" disabled>Registrar entrada</button>
+    </form>
+  {% endif %}
+
+</div>
+
+<a href="{% url 'core:dashboard' %}" class="salida">Salir del modo kiosco</a>
+
+<script>
+  // Reloj
+  const reloj = document.querySelector('#reloj');
+  function pintarReloj() {
+    reloj.textContent = new Date().toLocaleTimeString('es-MX',
+      { hour: '2-digit', minute: '2-digit', hour12: false });
+  }
+  pintarReloj();
+  setInterval(pintarReloj, 10000);
+
+  // Teclado numerico
+  const campo = document.querySelector('#numero');
+  if (campo) {
+    const casillas = [...document.querySelectorAll('.casilla')];
+    const enviar = document.querySelector('#enviar');
+    const largo = casillas.length;
+
+    function pintar() {
+      const valor = campo.value;
+      casillas.forEach(function (casilla, i) {
+        casilla.textContent = valor[i] || '';
+        casilla.classList.toggle('llena', Boolean(valor[i]));
+        casilla.classList.toggle('activa', i === valor.length);
+      });
+      if (valor.length < largo) {
+        casillas[valor.length]?.replaceChildren(
+          Object.assign(document.createElement('i'), { className: 'cursor' })
+        );
+      }
+      enviar.disabled = valor.length === 0;
+    }
+
+    function escribir(digito) {
+      if (campo.value.length < largo) { campo.value += digito; pintar(); }
+      if (campo.value.length === largo) { setTimeout(enviarFormulario, 220); }
+    }
+
+    function enviarFormulario() {
+      if (campo.value.length) { document.querySelector('#form-acceso').submit(); }
+    }
+
+    document.querySelectorAll('.tecla').forEach(function (tecla) {
+      tecla.addEventListener('click', function () { escribir(tecla.dataset.valor); });
+    });
+    document.querySelector('#borrar').addEventListener('click', function () {
+      campo.value = campo.value.slice(0, -1);
+      pintar();
+    });
+    document.querySelector('#limpiar').addEventListener('click', function () {
+      campo.value = '';
+      pintar();
+    });
+    document.querySelector('#casillas').addEventListener('click', function () {
+      campo.focus();
+    });
+
+    // Teclado fisico y lectores de codigo
+    document.addEventListener('keydown', function (evento) {
+      if (evento.key >= '0' && evento.key <= '9') { escribir(evento.key); }
+      else if (evento.key === 'Backspace') {
+        campo.value = campo.value.slice(0, -1);
+        pintar();
+      } else if (evento.key === 'Enter') { enviarFormulario(); }
+    });
+
+    pintar();
+  }
+
+  // Tras mostrar el veredicto la pantalla vuelve sola al teclado
+  {% if resultado %}
+    setTimeout(function () {
+      location.href = "{% url 'clientes:checkin' %}";
+    }, {{ segundos }}000);
+  {% endif %}
+</script>
+
+</body>
+</html>

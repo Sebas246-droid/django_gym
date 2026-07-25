@@ -1,0 +1,57 @@
+{% extends 'base.html' %}
+
+{% block title %}Asistencias - GymPilot{% endblock %}
+{% block migas %}/ <span>Asistencias</span>{% endblock %}
+{% block encabezado %}Historial de asistencias{% endblock %}
+
+{% block acciones %}
+  <a href="{% url 'clientes:checkin' %}" class="btn btn-primario">Registrar acceso</a>
+{% endblock %}
+
+{% block content %}
+<div class="o-tabla-caja">
+  <table class="o-lista">
+    <thead>
+      <tr>
+        <th>Fecha</th><th>Numero</th><th>Cliente</th><th>Tipo</th>
+        <th>Sucursal</th><th>Entrenamiento</th><th>Registro</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for a in asistencias %}
+        <tr>
+          <td class="texto-tenue">{{ a.fecha_hora|date:'d/m/Y H:i' }}</td>
+          <td><span class="numero-socio">{{ a.cliente.numero_usuario }}</span></td>
+          <td>
+            <a href="{% url 'clientes:cliente_detail' a.cliente.pk %}">{{ a.cliente }}</a>
+          </td>
+          <td>
+            {% if a.tipo == 'entrada' %}
+              <span class="pill pill-ok">Entrada</span>
+            {% else %}
+              <span class="pill pill-gris">Salida</span>
+            {% endif %}
+          </td>
+          <td class="texto-tenue">{{ a.sucursal }}</td>
+          <td class="texto-tenue">{{ a.entrenamiento|default:'-' }}</td>
+          <td class="texto-tenue">{{ a.usuario|default:'-' }}</td>
+        </tr>
+      {% empty %}
+        <tr><td colspan="7" class="vacio">Sin asistencias.</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+
+{% if is_paginated %}
+  <div class="o-paginacion">
+    {% if page_obj.has_previous %}
+      <a href="?page={{ page_obj.previous_page_number }}" class="btn">Anterior</a>
+    {% endif %}
+    <span>Pagina {{ page_obj.number }} de {{ paginator.num_pages }}</span>
+    {% if page_obj.has_next %}
+      <a href="?page={{ page_obj.next_page_number }}" class="btn">Siguiente</a>
+    {% endif %}
+  </div>
+{% endif %}
+{% endblock %}

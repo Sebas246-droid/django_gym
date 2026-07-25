@@ -1,0 +1,162 @@
+{% extends 'base.html' %}
+{% load l10n %}
+
+{% block title %}Punto de venta - GymPilot{% endblock %}
+{% block migas %}/ <span>Punto de venta</span>{% endblock %}
+{% block encabezado %}Punto de venta{% endblock %}
+
+{% block acciones_derecha %}
+  <span class="pill pill-gris">{{ sucursal }}</span>
+{% endblock %}
+
+{% block acciones %}
+  <a href="{% url 'ventas:venta_list' %}" class="btn">Historial</a>
+{% endblock %}
+
+{% block content %}
+<div class="pos">
+
+  <section class="pos-catalogo">
+    <form method="get" class="pos-filtros">
+      <input type="search" name="q" value="{{ q }}"
+             placeholder="Buscar producto, codigo o marca" autofocus>
+      <select name="categoria" onchange="this.form.submit()">
+        <option value="">Todas las categorias</option>
+        {% for c in categorias %}
+          <option value="{{ c.pk }}" {% if categoria_id == c.pk|stringformat:'s' %}selected{% endif %}>
+            {{ c.nombre }}
+          </option>
+        {% endfor %}
+      </select>
+      <button type="submit" class="btn">Buscar</button>
+      {% if q or categoria_id %}
+        <a href="{% url 'ventas:pos' %}" class="btn">Limpiar</a>
+      {% endif %}
+    </form>
+
+    <div class="pos-rejilla">
+      {% for p in productos %}
+        <form method="post" action="{% url 'ventas:pos_agregar' p.pk %}">
+          {% csrf_token %}
+          <input type="hidden" name="q" value="{{ q }}">
+          <input type="hidden" name="categoria" value="{{ categoria_id }}">
+          <button type="submit" class="producto {% if p.stock_actual <= 0 %}agotado{% endif %}"
+                  {% if p.stock_actual <= 0 %}disabled{% endif %}>
+            <span class="cat">{{ p.categoria.nombre }}</span>
+            <span class="nombre">{{ p.nombre }}</span>
+            {% if p.marca %}<span class="marca">{{ p.marca }}</span>{% endif %}
+            <span class="pie">
+              <span class="precio">{{ p.precio_venta }}</span>
+              {% if p.stock_actual > 0 %}
+                <span class="stock">{{ p.stock_actual }} disp.</span>
+              {% else %}
+                <span class="stock sin">Agotado</span>
+              {% endif %}
+            </span>
+          </button>
+        </form>
+      {% empty %}
+        <p class="o-vacio">
+          {% if q or categoria_id %}
+            Ningun producto coincide con la busqueda.
+          {% else %}
+            Aun no hay productos. Registralos en
+            <a href="{% url 'inventario:producto_list' %}">Inventario</a>.
+          {% endif %}
+        </p>
+      {% endfor %}
+    </div>
+  </section>
+
+  <aside class="pos-carrito">
+    <div class="carrito-cabecera">
+      <h2>Carrito</h2>
+      {% if venta.piezas %}
+        <span class="pill pill-gris">{{ venta.piezas }} pza</span>
+      {% endif %}
+    </div>
+
+    {% if lineas %}
+      <div class="carrito-lineas">
+        {% for d in lineas %}
+          <div class="linea">
+            <div class="datos">
+              <strong>{{ d.producto.nombre }}</strong>
+              <span class="texto-tenue">{{ d.precio }} c/u</span>
+            </div>
+            <form method="post" action="{% url 'ventas:pos_linea' d.pk %}" class="cantidad">
+              {% csrf_token %}
+              <button type="submit" name="accion" value="menos" aria-label="Quitar uno">-</button>
+              <span class="valor">{{ d.cantidad }}</span>
+              <button type="submit" name="accion" value="mas" aria-label="Agregar uno">+</button>
+              <button type="submit" name="accion" value="quitar" class="quitar"
+                      aria-label="Quitar del carrito">&times;</button>
+            </form>
+            <div class="importe">{{ d.subtotal }}</div>
+          </div>
+        {% endfor %}
+      </div>
+
+      {% if sin_stock %}
+        <div class="o-mensaje error">
+          Sin stock suficiente en {{ sucursal }}:
+          {% for d in sin_stock %}{{ d.producto.nombre }}{% if not forloop.last %}, {% endif %}{% endfor %}.
+        </div>
+      {% endif %}
+
+      <form method="post" action="{% url 'ventas:pos_cobrar' %}" class="carrito-cobro o-form">
+        {% csrf_token %}
+
+        <label for="cliente">Cliente <span class="texto-tenue">(opcional)</span></label>
+        <select name="cliente" id="cliente">
+          <option value="">Venta de mostrador</option>
+          {% for c in clientes %}
+            <option value="{{ c.pk }}">{{ c.numero_usuario }} - {{ c.nombre }}</option>
+          {% endfor %}
+        </select>
+
+        <div class="cobro-fila">
+          <div>
+            <label for="metodo_pago">Metodo de pago</label>
+            <select name="metodo_pago" id="metodo_pago">
+              <option value="efectivo">Efectivo</option>
+              <option value="tarjeta">Tarjeta</option>
+              <option value="transferencia">Transferencia</option>
+            </select>
+          </div>
+          <div>
+            <label for="descuento">Descuento</label>
+            {# sin localizar: input[type=number] no acepta coma decimal #}
+            <input type="number" name="descuento" id="descuento" min="0" step="0.01"
+                   value="{{ venta.descuento|unlocalize }}">
+          </div>
+        </div>
+
+        <div class="carrito-total">
+          <span>Subtotal</span><span>{{ venta.subtotal }}</span>
+        </div>
+        <div class="carrito-total grande">
+          <span>Total</span><span>{{ venta.total }}</span>
+        </div>
+
+        <button type="submit" class="btn btn-primario btn-cobrar">Cobrar</button>
+      </form>
+
+      <form method="post" action="{% url 'ventas:pos_cancelar' %}">
+        {% csrf_token %}
+        <button type="submit" class="btn btn-peligro btn-vaciar">Vaciar carrito</button>
+      </form>
+    {% else %}
+      <div class="carrito-vacio">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4"
+             stroke-linecap="round" stroke-linejoin="round">
+          <circle cx="9" cy="20" r="1.4"/><circle cx="18" cy="20" r="1.4"/>
+          <path d="M2 3h2.5l2.2 11.4a2 2 0 0 0 2 1.6h8.4a2 2 0 0 0 2-1.6L21 7H5.5"/>
+        </svg>
+        <p>Toca un producto para agregarlo.</p>
+      </div>
+    {% endif %}
+  </aside>
+
+</div>
+{% endblock %}

@@ -1,0 +1,67 @@
+{% extends 'base.html' %}
+
+{% block title %}Staff - GymPilot{% endblock %}
+{% block migas %}/ <span>Staff</span>{% endblock %}
+{% block encabezado %}Staff{% endblock %}
+
+{% block acciones %}
+  <a href="{% url 'accounts:usuario_create' %}" class="btn btn-primario">Nuevo integrante</a>
+{% endblock %}
+
+{% block acciones_derecha %}
+  <span class="texto-tenue">
+    Plan {{ gym_actual.plan.nombre }} &middot; hasta {{ gym_actual.plan.usuarios_max }} usuarios
+  </span>
+{% endblock %}
+
+{% block content %}
+<div class="o-tabla-caja">
+  <table class="o-lista">
+    <thead>
+      <tr>
+        <th>Nombre</th><th>Usuario</th><th>Rol</th><th>Sucursal</th>
+        <th>Contacto</th><th>Estado</th><th class="acciones"></th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for usuario in usuarios %}
+        <tr class="{% if not usuario.is_active %}inactiva{% endif %}">
+          <td><strong>{{ usuario.get_full_name|default:usuario.username }}</strong></td>
+          <td><span class="numero-socio">{{ usuario.username }}</span></td>
+          <td><span class="pill pill-gris">{{ usuario.rol }}</span></td>
+          <td>{{ usuario.sucursal|default:'-' }}</td>
+          <td class="texto-tenue">
+            {{ usuario.email|default:'' }}
+            {% if usuario.telefono %}<br>{{ usuario.telefono }}{% endif %}
+            {% if not usuario.email and not usuario.telefono %}-{% endif %}
+          </td>
+          <td>
+            {% if usuario.is_active %}
+              <span class="pill pill-ok">Activo</span>
+            {% else %}
+              <span class="pill pill-gris">Inactivo</span>
+            {% endif %}
+          </td>
+          <td class="acciones">
+            <a href="{% url 'accounts:usuario_update' usuario.pk %}" class="btn-enlace">Editar</a>
+            <a href="{% url 'accounts:usuario_password' usuario.pk %}" class="btn-enlace">Contrasena</a>
+            <form method="post" action="{% url 'accounts:usuario_toggle' usuario.pk %}"
+                  style="display:inline">
+              {% csrf_token %}
+              <button type="submit" class="btn-enlace">
+                {{ usuario.is_active|yesno:'Desactivar,Activar' }}
+              </button>
+            </form>
+          </td>
+        </tr>
+      {% empty %}
+        <tr><td colspan="7" class="vacio">Sin integrantes todavia.</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+
+<p class="texto-tenue" style="margin-top:14px;font-size:13px">
+  Cada integrante entra al sistema con su usuario y la contrasena que le asignes aqui.
+</p>
+{% endblock %}

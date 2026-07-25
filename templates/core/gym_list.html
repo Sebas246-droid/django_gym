@@ -1,0 +1,57 @@
+{% extends 'base.html' %}
+
+{% block title %}Gimnasios - GymPilot{% endblock %}
+{% block migas %}/ <span>Gimnasios</span>{% endblock %}
+{% block encabezado %}Gimnasios{% endblock %}
+
+{% block acciones %}
+  <a href="{% url 'core:gym_create' %}" class="btn btn-primario">Alta de gimnasio</a>
+{% endblock %}
+
+{% block content %}
+<div class="o-tabla-caja">
+  <table class="o-lista">
+    <thead>
+      <tr>
+        <th>Nombre</th><th>Plan</th><th>Colores</th><th class="num">Sucursales</th>
+        <th class="num">Usuarios</th><th>Alta</th><th>Estado</th><th class="acciones"></th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for gym in gyms %}
+        <tr class="{% if not gym.activo %}inactiva{% endif %}">
+          <td>
+            <strong>{{ gym.nombre }}</strong><br>
+            <a href="{% url 'core:landing' gym.slug %}" target="_blank"
+               class="texto-tenue" style="font-size:12px">/g/{{ gym.slug }}/</a>
+          </td>
+          <td>{{ gym.plan.nombre }}</td>
+          <td>
+            <span style="display:inline-block;width:16px;height:16px;border-radius:3px;
+                         background:{{ gym.color_primario }};vertical-align:-3px"></span>
+            <span style="display:inline-block;width:16px;height:16px;border-radius:3px;
+                         background:{{ gym.color_secundario }};vertical-align:-3px;
+                         border:1px solid #ccc"></span>
+          </td>
+          <td class="num">{{ gym.sucursales.count }} / {{ gym.plan.sucursales_max }}</td>
+          <td class="num">{{ gym.users.count }} / {{ gym.plan.usuarios_max }}</td>
+          <td class="texto-tenue">{{ gym.fecha_alta }}</td>
+          <td>
+            {% if gym.activo %}
+              <span class="pill pill-ok">Activo</span>
+            {% else %}
+              <span class="pill pill-gris">Inactivo</span>
+            {% endif %}
+          </td>
+          <td class="acciones">
+            <a href="{% url 'core:gym_update' gym.pk %}" class="btn-enlace">Editar</a>
+            <a href="{% url 'accounts:admin_gym_create' gym.pk %}" class="btn-enlace">Administrador</a>
+          </td>
+        </tr>
+      {% empty %}
+        <tr><td colspan="8" class="vacio">Sin gimnasios.</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endblock %}

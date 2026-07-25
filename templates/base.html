@@ -1,0 +1,141 @@
+{% load static %}
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{% block title %}GymPilot{% endblock %}</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap"
+        rel="stylesheet">
+  <link rel="stylesheet" href="{% static 'css/gympilot.css' %}">
+  {% if gym_actual %}
+    <style>
+      :root {
+        --acento: {{ gym_actual.color_primario }};
+        --acento-rgb: {{ gym_actual.color_primario_rgb }};
+        --acento-texto: {{ gym_actual.color_primario_texto }};
+      }
+    </style>
+  {% endif %}
+  {% block extra_head %}{% endblock %}
+</head>
+<body>
+
+<div class="app">
+
+  <aside class="lateral">
+    <a href="{% url 'core:dashboard' %}" class="marca">
+      <span class="insignia">
+        {% if gym_actual.logo %}
+          <img src="{{ gym_actual.logo.url }}" alt="">
+        {% else %}
+          {{ gym_actual.nombre.0|default:'G'|upper }}
+        {% endif %}
+      </span>
+      <span class="nombre">{{ gym_actual.nombre|default:'GymPilot' }}</span>
+    </a>
+
+    <nav class="nav">
+      {% if gym_actual %}
+        <a href="{% url 'core:dashboard' %}" class="{% if menu == 'dashboard' %}activo{% endif %}">
+          {% include 'core/_icono.html' with nombre='tablero' %} Tablero
+        </a>
+        <a href="{% url 'clientes:checkin' %}" class="{% if menu == 'checkin' %}activo{% endif %}">
+          {% include 'core/_icono.html' with nombre='acceso' %} Acceso
+        </a>
+
+        <div class="nav-grupo">Operacion</div>
+        <a href="{% url 'clientes:cliente_list' %}" class="{% if menu == 'clientes' %}activo{% endif %}">
+          {% include 'core/_icono.html' with nombre='clientes' %} Clientes
+        </a>
+        <a href="{% url 'clientes:membresia_list' %}" class="{% if menu == 'membresias' %}activo{% endif %}">
+          {% include 'core/_icono.html' with nombre='membresias' %} Membresias
+        </a>
+        <a href="{% url 'ventas:pos' %}" class="{% if menu == 'pos' %}activo{% endif %}">
+          {% include 'core/_icono.html' with nombre='pos' %} Punto de venta
+        </a>
+        <a href="{% url 'ventas:venta_list' %}" class="{% if menu == 'ventas' %}activo{% endif %}">
+          {% include 'core/_icono.html' with nombre='ventas' %} Ventas
+        </a>
+        <a href="{% url 'inventario:producto_list' %}" class="{% if menu == 'inventario' %}activo{% endif %}">
+          {% include 'core/_icono.html' with nombre='inventario' %} Inventario
+        </a>
+        <a href="{% url 'entrenamiento:list' %}" class="{% if menu == 'entrenamientos' %}activo{% endif %}">
+          {% include 'core/_icono.html' with nombre='entrenamiento' %} Entrenamientos
+        </a>
+
+        {% if es_admin %}
+          <div class="nav-grupo">Administracion</div>
+          <a href="{% url 'accounts:usuario_list' %}" class="{% if menu == 'staff' %}activo{% endif %}">
+            {% include 'core/_icono.html' with nombre='staff' %} Staff
+          </a>
+          <a href="{% url 'core:sucursal_list' %}" class="{% if menu == 'sucursales' %}activo{% endif %}">
+            {% include 'core/_icono.html' with nombre='sucursales' %} Sucursales
+          </a>
+          <a href="{% url 'core:sitio' %}" class="{% if menu == 'sitio' %}activo{% endif %}">
+            {% include 'core/_icono.html' with nombre='sitio' %} Sitio web
+          </a>
+        {% endif %}
+      {% endif %}
+
+      {% if user.is_superuser %}
+        <div class="nav-grupo">Plataforma</div>
+        <a href="{% url 'core:gym_list' %}" class="{% if menu == 'saas' %}activo{% endif %}">
+          {% include 'core/_icono.html' with nombre='gimnasios' %} Gimnasios
+        </a>
+        <a href="{% url 'core:plan_list' %}" class="{% if menu == 'planes' %}activo{% endif %}">
+          {% include 'core/_icono.html' with nombre='planes' %} Planes
+        </a>
+      {% endif %}
+    </nav>
+
+    <div class="lateral-pie">
+      <span class="avatar">{{ user.username.0|upper }}</span>
+      <span class="datos">
+        <strong>{{ user }}</strong>
+        <span>{{ user.rol }}</span>
+      </span>
+      <form action="{% url 'accounts:logout' %}" method="post">
+        {% csrf_token %}
+        <button type="submit" class="btn btn-enlace" title="Cerrar sesion">
+          {% include 'core/_icono.html' with nombre='salir' %}
+        </button>
+      </form>
+    </div>
+  </aside>
+
+  <div class="principal">
+    <header class="cabecera">
+      <div class="titulos">
+        <div class="migas">
+          <a href="{% url 'core:dashboard' %}">Inicio</a>
+          {% block migas %}{% endblock %}
+        </div>
+        <h1>{% block encabezado %}{% endblock %}</h1>
+      </div>
+      <div class="cabecera-acciones">
+        {% block acciones_derecha %}{% endblock %}
+        {% block acciones %}{% endblock %}
+      </div>
+    </header>
+
+    {% if messages %}
+      <div class="o-mensajes">
+        {% for message in messages %}
+          <div class="o-mensaje {{ message.tags }}">{{ message }}</div>
+        {% endfor %}
+      </div>
+    {% endif %}
+
+    <main class="contenido">
+      {% block content %}{% endblock %}
+    </main>
+  </div>
+
+</div>
+
+{% block extra_js %}{% endblock %}
+</body>
+</html>
