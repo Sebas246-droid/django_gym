@@ -1,0 +1,14 @@
+# Fase de build de Nixpacks (Railway).
+#
+# collectstatic corre aqui, dentro de la imagen, para que WhiteNoise sirva los
+# estaticos ya generados. Se fuerza DEBUG=False solo en este comando para que
+# se genere el manifest con hash, sin depender de como este la variable en el
+# servicio. No toca la base de datos.
+#
+# Las migraciones y el alta del super administrador NO van aqui: van en el
+# preDeployCommand de railway.json, que corre en el deploy con la base de datos
+# y las variables ya disponibles.
+
+[phases.build]
+dependsOn = ["install"]
+cmds = ["DEBUG=False python manage.py collectstatic --noinput"]

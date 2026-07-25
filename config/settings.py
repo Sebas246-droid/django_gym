@@ -25,8 +25,14 @@ CSRF_TRUSTED_ORIGINS = [
     o.strip() for o in os.getenv('CSRF_TRUSTED_ORIGINS', '').split(',') if o.strip()
 ]
 
-# Railway expone el dominio publico del servicio en esta variable. Lo agregamos
-# solo para no tener que repetirlo a mano en ALLOWED_HOSTS y CSRF.
+# En Railway todo el trafico entra por su proxy sobre dominios *.railway.app:
+# el propio dominio del servicio, y el host del healthcheck. El comodin de
+# Django (un valor que empieza con punto) cubre ambos y sus subdominios.
+if os.getenv('RAILWAY_ENVIRONMENT') or os.getenv('RAILWAY_PUBLIC_DOMAIN'):
+    ALLOWED_HOSTS.append('.railway.app')
+    CSRF_TRUSTED_ORIGINS.append('https://*.railway.app')
+
+# Dominio publico concreto del servicio (para CSRF con dominio propio a futuro).
 RAILWAY_DOMAIN = os.getenv('RAILWAY_PUBLIC_DOMAIN', '')
 if RAILWAY_DOMAIN:
     ALLOWED_HOSTS.append(RAILWAY_DOMAIN)
