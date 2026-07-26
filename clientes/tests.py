@@ -1,10 +1,12 @@
 """Pruebas del acceso por numero de usuario y del sitio publico."""
 
 from datetime import timedelta
+from unittest import mock
 
 from django.contrib.auth import get_user_model
 from django.contrib.auth.models import Group
 from django.core.management import call_command
+from django.db import IntegrityError
 from django.test import TestCase
 from django.urls import reverse
 from django.utils import timezone
@@ -68,6 +70,49 @@ class NumeroUsuarioTest(BaseGymTest):
             nombre='Ajeno',
         )
         self.assertEqual(mio.numero_usuario, ajeno.numero_usuario)
+
+    def test_el_numero_de_una_baja_no_se_reasigna(self):
+        baja = self.crear_cliente('Se va')
+        baja.soft_delete()
+        nuevo = self.crear_cliente('Llega')
+        self.assertNotEqual(nuevo.numero_usuario, baja.numero_usuario)
+
+    def test_pasa_de_9999_a_10000(self):
+        """Comparados como texto, '999' saldria mayor que '1000'."""
+        tope = self.crear_cliente('Tope')
+        Cliente.objects.filter(pk=tope.pk).update(numero_usuario='9999')
+        self.assertEqual(self.crear_cliente('Siguiente').numero_usuario, '10000')
+
+    def test_dos_altas_a_la_vez_no_repiten_numero(self):
+        """
+        Simula que otra alta se colo entre el calculo y el guardado: la primera
+        vez devuelve un numero ya tomado, y el alta debe recalcular en vez de
+        reventar o duplicar.
+        """
+        ocupado = self.crear_cliente('Primero').numero_usuario
+        original = Cliente.siguiente_numero
+        respuestas = [ocupado]
+
+        def numero_pisado(gym_id):
+            return respuestas.pop(0) if respuestas else original(gym_id)
+
+        with mock.patch.object(
+            Cliente, 'siguiente_numero', staticmethod(numero_pisado)
+        ):
+            segundo = self.crear_cliente('Segundo')
+
+        self.assertNotEqual(segundo.numero_usuario, ocupado)
+        self.assertEqual(
+            Cliente.objects.filter(
+                gym=self.gym, numero_usuario=segundo.numero_usuario
+            ).count(),
+            1,
+        )
+
+    def test_un_error_distinto_no_se_confunde_con_el_choque(self):
+        """Sin sucursal el guardado falla; no debe reintentarse cinco veces."""
+        with self.assertRaises(IntegrityError):
+            Cliente.objects.create(gym=self.gym, sucursal=None, nombre='Sin sucursal')
 
 
 class AccesoPorNumeroTest(BaseGymTest):

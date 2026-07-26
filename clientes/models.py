@@ -1,6 +1,7 @@
 from datetime import timedelta
 
-from django.db import models
+from django.db import IntegrityError, models, transaction
+from django.db.models.functions import Cast
 from django.utils import timezone
 
 from core.models import GymModel
@@ -56,21 +57,52 @@ class Cliente(GymModel):
     def __str__(self):
         return self.nombre
 
+    #: Cuantas veces se recalcula el numero si otra alta se adelanto.
+    INTENTOS_NUMERO = 5
+
     def save(self, *args, **kwargs):
-        if not self.numero_usuario:
+        if self.numero_usuario:
+            return super().save(*args, **kwargs)
+
+        # Calcular el numero y guardarlo son dos pasos, asi que dos altas a la
+        # vez pueden sacar el mismo. Quien decide es el indice unico de la base:
+        # si rebota, se recalcula y se reintenta.
+        for intento in range(self.INTENTOS_NUMERO):
             self.numero_usuario = self.siguiente_numero(self.gym_id)
-        super().save(*args, **kwargs)
+            try:
+                with transaction.atomic():
+                    return super().save(*args, **kwargs)
+            except IntegrityError:
+                if not self._numero_ocupado() or intento == self.INTENTOS_NUMERO - 1:
+                    raise  # el choque fue por otra cosa, o ya se intento de mas
+                self.numero_usuario = ''
+
+    def _numero_ocupado(self):
+        """Distingue el choque de numero de cualquier otro error de integridad."""
+        return (
+            Cliente.objects.filter(
+                gym_id=self.gym_id, numero_usuario=self.numero_usuario
+            )
+            .exclude(pk=self.pk)
+            .exists()
+        )
 
     @staticmethod
     def siguiente_numero(gym_id):
-        """Numeros de 4 digitos a partir del 1000, consecutivos por gimnasio."""
-        usados = (
-            Cliente.objects.filter(gym_id=gym_id)
-            .exclude(numero_usuario='')
-            .values_list('numero_usuario', flat=True)
+        """
+        Numeros de 4 digitos a partir del 1000, consecutivos por gimnasio.
+
+        Los de las bajas no se reciclan: el numero identifica a una persona en
+        el historial de asistencias y reusarlo mezclaria a dos.
+        """
+        # El maximo lo saca la base. Hay que compararlos como numeros, no como
+        # texto, o '999' saldria mayor que '1000'.
+        mayor = (
+            Cliente.objects.filter(gym_id=gym_id, numero_usuario__regex=r'^\d+$')
+            .annotate(valor=Cast('numero_usuario', models.IntegerField()))
+            .aggregate(mayor=models.Max('valor'))['mayor']
         )
-        numeros = [int(n) for n in usados if n.isdigit()]
-        return str(max(numeros) + 1 if numeros else 1000)
+        return str(1000 if mayor is None else mayor + 1)
 
     @property
     def membresia_vigente(self):
