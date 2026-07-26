@@ -50,6 +50,9 @@
           Escribenos por WhatsApp
         </a>
       {% endif %}
+      {% if imagenes %}
+        <a href="#galeria" class="boton boton-linea">Ver instalaciones</a>
+      {% endif %}
       {% if sucursales %}
         <a href="#sucursales" class="boton boton-linea">Ver sucursales</a>
       {% endif %}
@@ -70,6 +73,14 @@
       </div>
     </div>
   </div>
+
+  {% if imagenes %}
+    {# Señal de que la pagina sigue hacia abajo: la flecha late para invitar a bajar. #}
+    <a href="#galeria" class="hero-bajar" aria-label="Ver las instalaciones">
+      <span>Conoce el gimnasio</span>
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 9l6 6 6-6"/></svg>
+    </a>
+  {% endif %}
 </section>
 
 {% if imagenes %}
@@ -77,29 +88,33 @@
   <div class="envoltura">
     <h2>Nuestras <span>instalaciones</span></h2>
     <p class="intro">Conoce el espacio donde vas a entrenar.</p>
-    <div class="galeria">
-      {% for img in imagenes %}
-        <figure>
-          <img src="{{ img.imagen.url }}" alt="{{ img.titulo }}" loading="lazy">
-          {% if img.titulo %}<figcaption>{{ img.titulo }}</figcaption>{% endif %}
-        </figure>
-      {% endfor %}
+
+    {# La pista se desplaza con scroll-snap: sin JS sigue sirviendo arrastrando. #}
+    <div class="carrusel" data-carrusel>
+      <div class="carrusel-pista" data-pista>
+        {% for img in imagenes %}
+          <figure>
+            <img src="{{ img.imagen.url }}" alt="{{ img.titulo }}" loading="lazy">
+            {% if img.titulo %}<figcaption>{{ img.titulo }}</figcaption>{% endif %}
+          </figure>
+        {% endfor %}
+      </div>
+
+      <button type="button" class="carrusel-flecha izq" data-ir="-1"
+              aria-label="Foto anterior" hidden>
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M15 6l-6 6 6 6"/></svg>
+      </button>
+      <button type="button" class="carrusel-flecha der" data-ir="1"
+              aria-label="Foto siguiente" hidden>
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 6l6 6-6 6"/></svg>
+      </button>
     </div>
   </div>
 </section>
 {% endif %}
 
-<section class="seccion seccion-oscura">
-  <div class="envoltura">
-    <blockquote class="cita">
-      El exito suele llegar a quienes estan demasiado ocupados para buscarlo.
-      <span class="autor">- Henry David Thoreau</span>
-    </blockquote>
-  </div>
-</section>
-
 {% if sucursales %}
-<section class="seccion" id="sucursales">
+<section class="seccion seccion-oscura" id="sucursales">
   <div class="envoltura">
     <h2>Nuestras <span>sucursales</span></h2>
     <p class="intro">Encuentra la mas cercana a ti.</p>
@@ -162,6 +177,45 @@
   <a href="{{ gym.whatsapp_url }}" target="_blank" rel="noopener" class="whatsapp-flotante">
     WhatsApp
   </a>
+{% endif %}
+
+{% if imagenes %}
+<script>
+// Carrusel de la galeria. Las flechas nacen ocultas y solo aparecen si hay algo
+// que desplazar, para que con dos o tres fotos que ya caben no estorben.
+document.querySelectorAll('[data-carrusel]').forEach(function (carrusel) {
+  var pista = carrusel.querySelector('[data-pista]');
+  var flechas = carrusel.querySelectorAll('[data-ir]');
+
+  function paso() {
+    var figura = pista.querySelector('figure');
+    if (!figura) return pista.clientWidth;
+    // Ancho de una foto mas el hueco: asi cada clic avanza una foto justa.
+    var hueco = parseFloat(getComputedStyle(pista).columnGap) || 0;
+    return figura.getBoundingClientRect().width + hueco;
+  }
+
+  function refrescar() {
+    var desplazable = pista.scrollWidth - pista.clientWidth > 4;
+    flechas.forEach(function (b) { b.hidden = !desplazable; });
+    if (!desplazable) return;
+    // Al llegar a un extremo, la flecha de ese lado se apaga.
+    carrusel.querySelector('.izq').disabled = pista.scrollLeft <= 2;
+    carrusel.querySelector('.der').disabled =
+      pista.scrollLeft >= pista.scrollWidth - pista.clientWidth - 2;
+  }
+
+  flechas.forEach(function (boton) {
+    boton.addEventListener('click', function () {
+      pista.scrollBy({ left: paso() * Number(boton.dataset.ir), behavior: 'smooth' });
+    });
+  });
+
+  pista.addEventListener('scroll', refrescar, { passive: true });
+  window.addEventListener('resize', refrescar);
+  refrescar();
+});
+</script>
 {% endif %}
 
 </body>

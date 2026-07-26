@@ -26,6 +26,7 @@ class Producto(GymModel):
     codigo = models.CharField(max_length=50)
     nombre = models.CharField(max_length=150)
     marca = models.CharField(max_length=100, blank=True)
+    foto = models.ImageField(upload_to='productos/', blank=True, null=True)
     precio_compra = models.DecimalField(max_digits=10, decimal_places=2, default=0)
     precio_venta = models.DecimalField(max_digits=10, decimal_places=2, default=0)
 

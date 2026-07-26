@@ -42,6 +42,14 @@
           <input type="hidden" name="categoria" value="{{ categoria_id }}">
           <button type="submit" class="producto {% if p.stock_actual <= 0 %}agotado{% endif %}"
                   {% if p.stock_actual <= 0 %}disabled{% endif %}>
+            <span class="foto">
+              {% if p.foto %}
+                <img src="{{ p.foto.url }}" alt="" loading="lazy">
+              {% else %}
+                {# Sin foto se muestra la inicial: la rejilla no se descuadra. #}
+                <span class="inicial">{{ p.nombre|first|upper }}</span>
+              {% endif %}
+            </span>
             <span class="cat">{{ p.categoria.nombre }}</span>
             <span class="nombre">{{ p.nombre }}</span>
             {% if p.marca %}<span class="marca">{{ p.marca }}</span>{% endif %}
