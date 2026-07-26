@@ -799,6 +799,25 @@ table.o-lista .inactiva td { opacity: .5; }
   color: var(--alerta);
   font-size: 12.5px;
 }
+/* Bloque dentro de un formulario, para separar asuntos distintos. */
+.o-form-grupo {
+  margin-top: 26px;
+  padding-top: 22px;
+  border-top: 1px solid var(--borde);
+}
+.o-form-grupo h2 {
+  font-size: 15px;
+  font-weight: 600;
+  letter-spacing: -.01em;
+  margin: 0 0 4px;
+}
+.o-form-grupo .ayuda {
+  font-size: 12.5px;
+  color: var(--tinta-3);
+  margin: 0 0 18px;
+  max-width: 52ch;
+}
+
 .o-form-acciones {
   margin-top: 24px;
   padding-top: 18px;

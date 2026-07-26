@@ -23,7 +23,7 @@
         <tr>
           <td><a href="{% url 'inventario:compra_detail' c.pk %}"><strong>{{ c.pk }}</strong></a></td>
           <td class="texto-tenue">{{ c.fecha|date:'d/m/Y H:i' }}</td>
-          <td>{{ c.proveedor }}</td>
+          <td>{{ c.proveedor|default:'Sin proveedor' }}</td>
           <td class="texto-tenue">{{ c.sucursal }}</td>
           <td class="num"><strong>{{ c.total }}</strong></td>
           <td>

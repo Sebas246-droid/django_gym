@@ -1,0 +1,38 @@
+{% extends 'base.html' %}
+
+{% comment %}
+Alta de producto. Se separa del formulario generico porque agrupa dos cosas
+distintas: la ficha del producto y la entrada de existencias, que por debajo
+levanta una compra.
+{% endcomment %}
+
+{% block title %}{{ titulo }} - GymPilot{% endblock %}
+{% block migas %}/ <span>{{ titulo }}</span>{% endblock %}
+{% block encabezado %}{{ titulo }}{% endblock %}
+
+{% block content %}
+<div class="o-hoja o-hoja-angosta">
+  <form method="post" enctype="multipart/form-data" class="o-form">
+    {% csrf_token %}
+    {% if form.non_field_errors %}
+      <div class="o-mensaje error">{{ form.non_field_errors }}</div>
+    {% endif %}
+
+    {% for campo in form.ficha %}{% include 'inventario/_campo.html' %}{% endfor %}
+
+    <div class="o-form-grupo">
+      <h2>Existencias iniciales</h2>
+      <p class="ayuda">
+        Si capturas una cantidad se registra una compra por ese ingreso, para que
+        el stock y el historial cuadren.
+      </p>
+      {% for campo in form.existencias %}{% include 'inventario/_campo.html' %}{% endfor %}
+    </div>
+
+    <div class="o-form-acciones">
+      <button type="submit" class="btn btn-primario">Guardar</button>
+      <a href="{% url 'inventario:producto_list' %}" class="btn">Cancelar</a>
+    </div>
+  </form>
+</div>
+{% endblock %}

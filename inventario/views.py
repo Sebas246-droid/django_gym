@@ -10,6 +10,7 @@ from inventario.forms import (
     CompraDetalleForm,
     CompraForm,
     InventarioSucursalForm,
+    ProductoAltaForm,
     ProductoForm,
     ProveedorForm,
 )
@@ -67,11 +68,54 @@ class ProductoListView(GymQuerysetMixin, ListView):
 
 
 class ProductoCreateView(GymFormMixin, CreateView):
+    """El alta carga tambien las existencias, levantando la compra que las respalda."""
+
     model = Producto
-    form_class = ProductoForm
-    template_name = 'core/form.html'
+    form_class = ProductoAltaForm
+    template_name = 'inventario/producto_form.html'
     success_url = reverse_lazy('inventario:producto_list')
     extra_context = {'titulo': 'Nuevo producto'}
+
+    def form_valid(self, form):
+        cantidad = form.cleaned_data.get('cantidad') or 0
+        with transaction.atomic():
+            respuesta = super().form_valid(form)
+            if cantidad:
+                self.compra = self._comprar(
+                    producto=self.object,
+                    cantidad=cantidad,
+                    sucursal=form.cleaned_data['sucursal'],
+                    proveedor=form.cleaned_data.get('proveedor'),
+                )
+        return respuesta
+
+    def _comprar(self, producto, cantidad, sucursal, proveedor):
+        """Deja la entrada asentada como compra confirmada, que es la que mueve stock."""
+        compra = Compra.objects.create(
+            gym=self.gym,
+            sucursal=sucursal,
+            proveedor=proveedor,
+            usuario=self.request.user,
+        )
+        CompraDetalle.objects.create(
+            compra=compra,
+            producto=producto,
+            cantidad=cantidad,
+            precio=producto.precio_compra,
+        )
+        compra.confirmar()
+        return compra
+
+    def get_success_url(self):
+        compra = getattr(self, 'compra', None)
+        if compra is None:
+            return super().get_success_url()
+        messages.success(
+            self.request,
+            f'Se registro la compra #{compra.pk} con {compra.detalles.first().cantidad} '
+            f'piezas en {compra.sucursal}.',
+        )
+        return super().get_success_url()
 
 
 class ProductoUpdateView(GymFormMixin, UpdateView):

@@ -30,15 +30,30 @@ class GymModelForm(SinSufijoMixin, forms.ModelForm):
     def __init__(self, *args, gym=None, **kwargs):
         self.gym = gym
         super().__init__(*args, **kwargs)
-        if gym is not None:
-            for field in self.fields.values():
-                if isinstance(field, forms.ModelChoiceField):
-                    modelo = field.queryset.model
-                    nombres = {f.name for f in modelo._meta.get_fields()}
-                    if 'gym' in nombres:
-                        field.queryset = field.queryset.filter(gym=gym)
-                        if 'activo' in nombres:
-                            field.queryset = field.queryset.filter(activo=True)
+        if gym is None:
+            return
+
+        # El gym se pone desde ya, no al guardar: varios modelos son unicos por
+        # (gym, algo) y sin este valor esa comprobacion no se puede hacer.
+        self.instance.gym = gym
+
+        for field in self.fields.values():
+            if isinstance(field, forms.ModelChoiceField):
+                modelo = field.queryset.model
+                nombres = {f.name for f in modelo._meta.get_fields()}
+                if 'gym' in nombres:
+                    field.queryset = field.queryset.filter(gym=gym)
+                    if 'activo' in nombres:
+                        field.queryset = field.queryset.filter(activo=True)
+
+    def _get_validation_exclusions(self):
+        """
+        Django excluye de la validacion los campos que no estan en el
+        formulario, y de paso se salta cualquier unicidad que los incluya. El
+        gym nunca se muestra, asi que sin esto un codigo repetido pasaba el
+        formulario y reventaba con IntegrityError al guardar.
+        """
+        return super()._get_validation_exclusions() - {'gym'}
 
 
 class PlanForm(SinSufijoMixin, forms.ModelForm):

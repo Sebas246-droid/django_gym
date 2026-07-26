@@ -8,9 +8,7 @@
 <div class="o-hoja o-hoja-angosta">
   <form method="post" enctype="multipart/form-data" class="o-form">
     {% csrf_token %}
-    {% if form.non_field_errors %}
-      <div class="o-mensaje error">{{ form.non_field_errors }}</div>
-    {% endif %}
+    {# as_p ya pinta arriba los errores generales: repetirlos los duplicaba. #}
     {{ form.as_p }}
     <div class="o-form-acciones">
       <button type="submit" class="btn btn-primario">Guardar</button>

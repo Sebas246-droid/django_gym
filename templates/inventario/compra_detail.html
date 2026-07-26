@@ -32,7 +32,10 @@
     <h2>Datos</h2>
     <table class="o-lista">
       <tbody>
-        <tr><th>Proveedor</th><td>{{ compra.proveedor }}</td></tr>
+        <tr>
+          <th>Proveedor</th>
+          <td>{{ compra.proveedor|default:'Sin proveedor' }}</td>
+        </tr>
         <tr><th>Sucursal</th><td>{{ compra.sucursal }}</td></tr>
         <tr><th>Fecha</th><td>{{ compra.fecha|date:'d/m/Y H:i' }}</td></tr>
         <tr><th>Usuario</th><td>{{ compra.usuario|default:'-' }}</td></tr>

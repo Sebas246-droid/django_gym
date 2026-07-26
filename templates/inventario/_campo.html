@@ -1,0 +1,11 @@
+{% comment %}Un campo del formulario, con el mismo armado que produce as_p.{% endcomment %}
+{% if campo.is_hidden %}
+  {{ campo }}
+{% else %}
+  <p>
+    {{ campo.errors }}
+    {{ campo.label_tag }}
+    {{ campo }}
+    {% if campo.help_text %}<span class="helptext">{{ campo.help_text }}</span>{% endif %}
+  </p>
+{% endif %}

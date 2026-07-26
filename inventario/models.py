@@ -102,8 +102,13 @@ class Compra(GymModel):
     sucursal = models.ForeignKey(
         'core.Sucursal', on_delete=models.PROTECT, related_name='compras'
     )
+    # Opcional: cargar existencias no siempre implica anotar a quien se le compro.
     proveedor = models.ForeignKey(
-        Proveedor, on_delete=models.PROTECT, related_name='compras'
+        Proveedor,
+        on_delete=models.PROTECT,
+        related_name='compras',
+        null=True,
+        blank=True,
     )
     usuario = models.ForeignKey(
         'accounts.User', on_delete=models.PROTECT, related_name='compras', null=True

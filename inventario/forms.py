@@ -1,6 +1,8 @@
 from django import forms
+from django.utils.html import format_html, format_html_join
 
 from core.forms import GymModelForm, SinSufijoMixin
+from core.models import Sucursal
 from inventario.models import (
     CategoriaProducto,
     Compra,
@@ -17,18 +19,40 @@ class CategoriaProductoForm(GymModelForm):
         fields = ['nombre', 'descripcion']
 
 
-class ProductoForm(GymModelForm):
+class ConSugerencias(forms.TextInput):
     """
-    El alta permite estrenar categoria sin salir de la pantalla: si la que hace
-    falta no esta en la lista, se escribe abajo y se crea junto con el producto.
+    Caja de texto con lista desplegable de valores ya usados. Es un datalist
+    del navegador: se escoge uno de la lista o se escribe algo que no esta.
     """
 
-    categoria_nueva = forms.CharField(
+    def __init__(self, sugerencias=(), attrs=None):
+        self.sugerencias = sugerencias
+        super().__init__(attrs)
+
+    def render(self, name, value, attrs=None, renderer=None):
+        lista = f'{name}-sugerencias'
+        attrs = {**(attrs or {}), 'list': lista, 'autocomplete': 'off'}
+        opciones = format_html_join(
+            '', '<option value="{}"></option>', ((s,) for s in self.sugerencias)
+        )
+        return format_html(
+            '{}<datalist id="{}">{}</datalist>',
+            super().render(name, value, attrs, renderer),
+            lista,
+            opciones,
+        )
+
+
+class ProductoForm(GymModelForm):
+    """
+    La categoria es un solo campo: despliega las que ya existen y acepta una
+    que no este, creandola junto con el producto.
+    """
+
+    categoria = forms.CharField(
         max_length=120,
-        required=False,
-        label='...o crea una categoria nueva',
-        help_text='Escribela aqui si no aparece en la lista de arriba.',
-        widget=forms.TextInput(attrs={'placeholder': 'Ej. Suplementos'}),
+        label='Categoria',
+        help_text='Elige una de la lista o escribe una nueva.',
     )
 
     class Meta:
@@ -43,43 +67,66 @@ class ProductoForm(GymModelForm):
             'precio_venta',
         ]
 
-    # Los campos declarados se van al final; asi la caja de la categoria nueva
-    # queda pegada a su lista y no despues de los precios.
-    field_order = [
-        'codigo',
-        'nombre',
-        'categoria',
-        'categoria_nueva',
-        'marca',
-        'foto',
-        'precio_compra',
-        'precio_venta',
-    ]
-
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        # Deja de ser obligatoria porque ahora se puede cubrir con el campo de texto.
-        self.fields['categoria'].required = False
-        self.fields['categoria'].empty_label = 'Elige una categoria'
+        self.fields['categoria'].widget = ConSugerencias(
+            sugerencias=self._existentes(),
+            attrs={'placeholder': 'Ej. Suplementos'},
+        )
+        # Al editar, el campo llega con el id de la categoria: se cambia por su
+        # nombre, que es lo que la caja de texto sabe mostrar.
+        if self.instance.pk and self.instance.categoria_id:
+            self.initial['categoria'] = self.instance.categoria.nombre
+
+    def _existentes(self):
+        if self.gym is None:
+            return []
+        return list(
+            CategoriaProducto.objects.filter(gym=self.gym, activo=True)
+            .order_by('nombre')
+            .values_list('nombre', flat=True)
+        )
+
+    def clean_categoria(self):
+        return (self.cleaned_data['categoria'] or '').strip()
+
+    def _verificar_codigo(self, codigo):
+        """
+        Se adelanta a la comprobacion de unicidad de Django, que corre despues
+        de clean(), para no dejar una categoria creada cuando el alta va a
+        fallar igual. Marcar aqui el error hace ademas que Django no repita el
+        mismo aviso mas abajo.
+        """
+        if not codigo or self.gym is None:
+            return
+        otros = Producto.objects.filter(gym=self.gym, codigo=codigo)
+        if self.instance.pk:
+            otros = otros.exclude(pk=self.instance.pk)
+        if otros.exists():
+            self.add_error('codigo', 'Ya existe un producto con ese codigo.')
 
     def clean(self):
         datos = super().clean()
-        categoria = datos.get('categoria')
-        nueva = (datos.get('categoria_nueva') or '').strip()
-
-        if not categoria and not nueva:
-            raise forms.ValidationError(
-                'Elige una categoria de la lista o escribe una nueva.'
-            )
-        if categoria and nueva:
-            raise forms.ValidationError(
-                'Elige una categoria o escribe una nueva, pero no las dos.'
-            )
-        # Si algun campo ya venia mal, no se crea nada: el formulario se
-        # vuelve a mostrar y la categoria se creara en el siguiente intento.
-        if nueva and not self.errors:
-            datos['categoria'] = self._categoria(nueva)
+        self._verificar_codigo(datos.get('codigo'))
+        nombre = datos.get('categoria')
+        if not nombre:
+            return datos
+        if self.errors:
+            # Algo mas viene mal: no se crea la categoria todavia. Se saca del
+            # diccionario porque el modelo espera un objeto, no el texto.
+            datos.pop('categoria', None)
+            return datos
+        datos['categoria'] = self._categoria(nombre)
         return datos
+
+    def _get_validation_exclusions(self):
+        exclusiones = super()._get_validation_exclusions()
+        # Cuando el alta ya trae errores la categoria se queda sin resolver a
+        # proposito. Sin esto el modelo agrega un 'no puede ser nulo' que solo
+        # estorba, encima del error de verdad.
+        if not isinstance(self.cleaned_data.get('categoria'), CategoriaProducto):
+            exclusiones.add('categoria')
+        return exclusiones
 
     def _categoria(self, nombre):
         """Reusa la categoria si ya existe con ese nombre, sin importar mayusculas."""
@@ -93,6 +140,74 @@ class ProductoForm(GymModelForm):
             existente.activo = True
             existente.save(update_fields=['activo', 'updated_at'])
         return existente
+
+
+class ProductoAltaForm(ProductoForm):
+    """
+    Alta de producto con sus existencias iniciales. Dar de alta algo que ya
+    tienes en la bodega es, en los hechos, una compra: por eso la cantidad se
+    pide aqui y la vista levanta la compra correspondiente, en vez de obligar a
+    recorrer producto -> compra -> linea -> confirmar.
+    """
+
+    cantidad = forms.IntegerField(
+        min_value=0,
+        required=False,
+        initial=0,
+        label='Cantidad inicial',
+        help_text='Cuantas piezas entran ahora. Dejalo en 0 si aun no tienes.',
+    )
+    sucursal = forms.ModelChoiceField(
+        queryset=Sucursal.objects.none(),
+        required=False,
+        label='Sucursal que las recibe',
+    )
+    proveedor = forms.ModelChoiceField(
+        queryset=Proveedor.objects.none(),
+        required=False,
+        label='Proveedor',
+        empty_label='Sin proveedor',
+        help_text='Opcional: solo para dejar constancia de a quien se le compro.',
+    )
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        sucursales = Sucursal.objects.filter(gym=self.gym, activo=True)
+        self.fields['sucursal'].queryset = sucursales
+        self.fields['proveedor'].queryset = Proveedor.objects.filter(
+            gym=self.gym, activo=True
+        )
+        # Con una sola sucursal no tiene sentido preguntar: se elige sola.
+        if sucursales.count() == 1:
+            self.fields['sucursal'].initial = sucursales.first()
+            self.fields['sucursal'].widget = forms.HiddenInput()
+
+    def clean(self):
+        datos = super().clean()
+        cantidad = datos.get('cantidad') or 0
+        if not cantidad or datos.get('sucursal'):
+            return datos
+
+        if not self.fields['sucursal'].queryset.exists():
+            raise forms.ValidationError(
+                'Para cargar existencias necesitas al menos una sucursal. '
+                'Da de alta una en Sucursales y vuelve a intentarlo.'
+            )
+        if self.fields['sucursal'].widget.is_hidden:
+            # Oculto no puede mostrar su propio error: se manda al aviso de arriba.
+            raise forms.ValidationError('Indica a que sucursal entran las piezas.')
+        self.add_error('sucursal', 'Indica a que sucursal entran las piezas.')
+        return datos
+
+    # La plantilla pinta los campos en dos bloques: la ficha del producto y lo
+    # que entra a la bodega.
+    EXISTENCIAS = ('cantidad', 'sucursal', 'proveedor')
+
+    def ficha(self):
+        return [c for c in self if c.name not in self.EXISTENCIAS]
+
+    def existencias(self):
+        return [self[nombre] for nombre in self.EXISTENCIAS]
 
 
 class ProveedorForm(GymModelForm):

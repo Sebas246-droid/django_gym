@@ -38,6 +38,16 @@ class GymModel(TimeStampedModel):
         self.activo = False
         self.save(update_fields=['activo', 'updated_at'])
 
+    def unique_error_message(self, model_class, unique_check):
+        """
+        Los datos siempre viven dentro de un gym: nombrarlo en el error solo
+        confunde. 'Ya existe un producto con ese Gym y Codigo' se lee mal
+        cuando quien lo ve nunca eligio un gym.
+        """
+        if 'gym' in unique_check and len(unique_check) > 1:
+            unique_check = tuple(f for f in unique_check if f != 'gym')
+        return super().unique_error_message(model_class, unique_check)
+
 
 class Plan(TimeStampedModel):
     """Características disponibles para cada cliente del SaaS."""
