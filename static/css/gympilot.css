@@ -799,6 +799,9 @@ table.o-lista .inactiva td { opacity: .5; }
   color: var(--alerta);
   font-size: 12.5px;
 }
+/* Mismo hueco que un campo normal, para bloques que no caben en un <p>. */
+.o-form .o-campo { margin: 0 0 18px; }
+
 /* Campo con un boton pegado a su derecha (elegir de la lista o crear). */
 .campo-con-boton { display: flex; gap: 8px; align-items: center; max-width: 440px; }
 .campo-con-boton select { flex: 1; min-width: 0; }
@@ -822,7 +825,8 @@ table.o-lista .inactiva td { opacity: .5; }
   font-weight: 550;
   margin-bottom: 6px;
 }
-.o-modal input[type=text] {
+.o-modal label.separado { margin-top: 16px; }
+.o-modal input[type=text], .o-modal select {
   width: 100%;
   padding: 9px 12px;
   border: 1px solid var(--borde-fuerte);
@@ -832,7 +836,7 @@ table.o-lista .inactiva td { opacity: .5; }
   color: var(--tinta);
   background: var(--panel);
 }
-.o-modal input[type=text]:focus {
+.o-modal input[type=text]:focus, .o-modal select:focus {
   outline: none;
   border-color: var(--acento);
   box-shadow: 0 0 0 3.5px rgba(var(--acento-rgb), .14);

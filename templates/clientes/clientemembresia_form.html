@@ -1,0 +1,79 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% comment %}
+Venta de membresia. El cliente se elige de la lista y, si es de nuevo ingreso,
+el boton de al lado lo da de alta desde un modal, sin abandonar la venta.
+{% endcomment %}
+
+{% block title %}{{ titulo }} - GymPilot{% endblock %}
+{% block migas %}/ <span>{{ titulo }}</span>{% endblock %}
+{% block encabezado %}{{ titulo }}{% endblock %}
+
+{% block content %}
+<div class="o-hoja o-hoja-angosta">
+  <form method="post" class="o-form">
+    {% csrf_token %}
+    {% if form.non_field_errors %}
+      <div class="o-mensaje error">{{ form.non_field_errors }}</div>
+    {% endif %}
+
+    {% for campo in form %}
+      {% if campo.name == 'cliente' %}
+        <div class="o-campo" data-selector-modal data-nuevo="{{ form.NUEVO }}">
+          {{ campo.errors }}
+          {{ campo.label_tag }}
+          <span class="campo-con-boton">
+            {{ campo }}
+            <button type="button" class="btn" data-abrir>Nuevo</button>
+          </span>
+
+          <dialog class="o-modal" data-modal>
+            <h2>Nuevo cliente</h2>
+            <p class="ayuda">
+              Se da de alta al guardar la venta. Los demas datos se completan
+              despues desde su ficha.
+            </p>
+
+            <label for="cliente-nombre">Nombre</label>
+            <input type="text" id="cliente-nombre" maxlength="150"
+                   placeholder="Nombre y apellidos"
+                   data-destino="id_cliente_nuevo_nombre" data-etiqueta data-obligatorio>
+
+            <label for="cliente-telefono" class="separado">Telefono</label>
+            <input type="text" id="cliente-telefono" maxlength="30"
+                   placeholder="Opcional"
+                   data-destino="id_cliente_nuevo_telefono">
+
+            {% if form.sucursales.count > 1 %}
+              <label for="cliente-sucursal" class="separado">Sucursal</label>
+              <select id="cliente-sucursal" data-destino="id_cliente_nuevo_sucursal"
+                      data-obligatorio>
+                <option value="">Elige una sucursal</option>
+                {% for s in form.sucursales %}
+                  <option value="{{ s.pk }}">{{ s.nombre }}</option>
+                {% endfor %}
+              </select>
+            {% endif %}
+
+            <p class="o-modal-error" data-aviso hidden>Falta un dato obligatorio.</p>
+            <div class="o-modal-acciones">
+              <button type="button" class="btn" data-cancelar>Cancelar</button>
+              <button type="button" class="btn btn-primario" data-guardar>Agregar</button>
+            </div>
+          </dialog>
+        </div>
+      {% else %}
+        {% include 'core/_campo.html' %}
+      {% endif %}
+    {% endfor %}
+
+    <div class="o-form-acciones">
+      <button type="submit" class="btn btn-primario">Guardar</button>
+      <a href="{% url 'clientes:clientemembresia_list' %}" class="btn">Cancelar</a>
+    </div>
+  </form>
+</div>
+
+<script src="{% static 'js/campo-modal.js' %}" defer></script>
+{% endblock %}

@@ -136,7 +136,7 @@ class ClienteMembresiaListView(GymQuerysetMixin, ListView):
 class ClienteMembresiaCreateView(GymFormMixin, CreateView):
     model = ClienteMembresia
     form_class = ClienteMembresiaForm
-    template_name = 'core/form.html'
+    template_name = 'clientes/clientemembresia_form.html'
     success_url = reverse_lazy('clientes:clientemembresia_list')
     extra_context = {'titulo': 'Vender membresia'}
 
