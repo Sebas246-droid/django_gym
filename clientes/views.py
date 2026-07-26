@@ -90,6 +90,18 @@ class ClienteDeleteView(SoftDeleteView):
     success_url = reverse_lazy('clientes:cliente_list')
 
 
+class ClienteCredencialView(GymQuerysetMixin, DetailView):
+    """
+    Credencial del socio, sola en la pagina y a tamano de tarjeta. Se imprime o
+    se guarda como PDF desde el navegador: no hace falta generar el archivo en
+    el servidor ni sumar una libreria para eso.
+    """
+
+    model = Cliente
+    template_name = 'clientes/credencial.html'
+    context_object_name = 'cliente'
+
+
 # --- Membresias (catalogo) ------------------------------------------------
 
 

@@ -8,6 +8,8 @@
 
 {% block acciones %}
   <a href="{% url 'clientes:cliente_update' cliente.pk %}" class="btn">Editar</a>
+  <a href="{% url 'clientes:cliente_credencial' cliente.pk %}" class="btn"
+     target="_blank">Credencial</a>
   <a href="{% url 'clientes:clientemembresia_create' %}?cliente={{ cliente.pk }}"
      class="btn btn-primario">Vender membresia</a>
   <form method="post" action="{% url 'clientes:asistencia_registrar' cliente.pk %}">

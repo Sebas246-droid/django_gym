@@ -10,6 +10,11 @@ urlpatterns = [
     path('<int:pk>/', views.ClienteDetailView.as_view(), name='cliente_detail'),
     path('<int:pk>/editar/', views.ClienteUpdateView.as_view(), name='cliente_update'),
     path('<int:pk>/baja/', views.ClienteDeleteView.as_view(), name='cliente_delete'),
+    path(
+        '<int:pk>/credencial/',
+        views.ClienteCredencialView.as_view(),
+        name='cliente_credencial',
+    ),
 
     path('membresias/', views.MembresiaListView.as_view(), name='membresia_list'),
     path(

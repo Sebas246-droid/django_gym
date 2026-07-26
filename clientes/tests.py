@@ -115,6 +115,36 @@ class NumeroUsuarioTest(BaseGymTest):
             Cliente.objects.create(gym=self.gym, sucursal=None, nombre='Sin sucursal')
 
 
+class CredencialTest(BaseGymTest):
+    def url(self, cliente):
+        return reverse('clientes:cliente_credencial', args=[cliente.pk])
+
+    def test_muestra_los_datos_del_socio(self):
+        cliente = self.crear_cliente('Ana Torres')
+        cuerpo = self.client.get(self.url(cliente)).content.decode()
+        self.assertIn('Ana Torres', cuerpo)
+        self.assertIn(cliente.numero_usuario, cuerpo)
+        self.assertIn(self.gym.nombre, cuerpo)
+
+    def test_avisa_cuando_no_hay_membresia_vigente(self):
+        cliente = self.crear_cliente('Sin plan')
+        self.assertIn(
+            'Sin membresia vigente', self.client.get(self.url(cliente)).content.decode()
+        )
+
+    def test_no_se_ve_la_de_otro_gimnasio(self):
+        otro = Gym.objects.create(nombre='Otro', plan=Plan.objects.get(nombre='Basico'))
+        ajeno = Cliente.objects.create(
+            gym=otro, sucursal=Sucursal.objects.get(gym=otro), nombre='Ajeno'
+        )
+        self.assertEqual(self.client.get(self.url(ajeno)).status_code, 404)
+
+    def test_pide_sesion(self):
+        cliente = self.crear_cliente('Con sesion')
+        self.client.logout()
+        self.assertEqual(self.client.get(self.url(cliente)).status_code, 302)
+
+
 class AccesoPorNumeroTest(BaseGymTest):
     def _ingresar(self, numero):
         self.client.post(reverse('clientes:checkin'), {'numero_usuario': numero})

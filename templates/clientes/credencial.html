@@ -1,0 +1,204 @@
+{% load static %}
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Credencial - {{ cliente.nombre }}</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap"
+        rel="stylesheet">
+  <style>
+    /*
+      Pagina suelta, a proposito: la credencial se imprime o se guarda como PDF
+      desde el navegador, sin el marco del panel alrededor.
+      Medidas de tarjeta bancaria (ID-1): 85.6 x 54 mm.
+    */
+    :root {
+      --acento: {{ gym_actual.color_primario|default:'#6366F1' }};
+      --oscuro: {{ gym_actual.color_secundario|default:'#111111' }};
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      padding: 34px 20px;
+      background: #ececef;
+      font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      color: #0b0b0f;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 22px;
+    }
+
+    .credencial {
+      width: 85.6mm;
+      height: 54mm;
+      background: var(--oscuro);
+      color: #fff;
+      border-radius: 3.5mm;
+      overflow: hidden;
+      display: flex;
+      flex-direction: column;
+      box-shadow: 0 10px 34px -12px rgba(0, 0, 0, .55);
+      /* Los fondos no se imprimen por omision: esto los conserva. */
+      -webkit-print-color-adjust: exact;
+      print-color-adjust: exact;
+    }
+
+    .credencial .tira {
+      background: var(--acento);
+      height: 8mm;
+      display: flex;
+      align-items: center;
+      gap: 2mm;
+      padding: 0 4mm;
+      color: #101010;
+    }
+    /* flex: none o el logo se encoge hasta quedar en una tira. */
+    .credencial .tira img {
+      flex: none;
+      height: 5mm;
+      width: 5mm;
+      object-fit: cover;
+      border-radius: 1mm;
+    }
+    .credencial .tira span {
+      font-size: 3.1mm;
+      font-weight: 700;
+      letter-spacing: .02em;
+      text-transform: uppercase;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .credencial .cuerpo { flex: 1; display: flex; gap: 4mm; padding: 4mm; }
+
+    .retrato {
+      width: 22mm;
+      height: 28mm;
+      flex: none;
+      border-radius: 2mm;
+      object-fit: cover;
+      background: rgba(255, 255, 255, .1);
+      border: .3mm solid rgba(255, 255, 255, .22);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 9mm;
+      font-weight: 600;
+      color: rgba(255, 255, 255, .45);
+    }
+
+    .datos { min-width: 0; display: flex; flex-direction: column; }
+    .datos .rotulo {
+      font-size: 2.2mm;
+      letter-spacing: .16em;
+      text-transform: uppercase;
+      color: rgba(255, 255, 255, .5);
+      margin-bottom: .8mm;
+    }
+    .datos .nombre {
+      font-size: 4.4mm;
+      font-weight: 650;
+      line-height: 1.15;
+      letter-spacing: -.02em;
+      margin-bottom: 3mm;
+      /* Un nombre largo se corta en dos renglones, no desborda la tarjeta. */
+      display: -webkit-box;
+      -webkit-line-clamp: 2;
+      -webkit-box-orient: vertical;
+      overflow: hidden;
+    }
+    .datos .numero {
+      font-size: 8mm;
+      font-weight: 750;
+      line-height: 1;
+      letter-spacing: .04em;
+      font-variant-numeric: tabular-nums;
+      color: var(--acento);
+    }
+    .datos .pie { margin-top: auto; font-size: 2.6mm; color: rgba(255, 255, 255, .62); }
+    .datos .pie b { color: #fff; font-weight: 600; }
+
+    .barra-acciones { display: flex; gap: 10px; flex-wrap: wrap; justify-content: center; }
+    .barra-acciones a, .barra-acciones button {
+      font: inherit;
+      font-size: 14px;
+      font-weight: 550;
+      padding: 9px 18px;
+      border-radius: 9px;
+      border: 1px solid #d8d8e0;
+      background: #fff;
+      color: #0b0b0f;
+      cursor: pointer;
+      text-decoration: none;
+    }
+    .barra-acciones .principal { background: var(--acento); border-color: transparent; }
+    .nota { font-size: 12.5px; color: #6b6b78; max-width: 62ch; text-align: center; }
+
+    @media print {
+      /* Solo la tarjeta: fuera fondo, botones y margenes de la hoja. */
+      @page { size: 85.6mm 54mm; margin: 0; }
+      html, body { height: 100%; overflow: hidden; }
+      body { padding: 0; background: #fff; gap: 0; display: block; }
+      .barra-acciones, .nota { display: none; }
+      /* Se amarra al tamano de la hoja en vez de repetir las medidas: con
+         medidas iguales, cualquier redondeo tiraba una segunda pagina en blanco. */
+      .credencial {
+        width: 100%;
+        height: 100%;
+        box-shadow: none;
+        border-radius: 0;
+        break-inside: avoid;
+      }
+    }
+  </style>
+</head>
+<body>
+
+<div class="credencial">
+  <div class="tira">
+    {% if gym_actual.logo %}<img src="{{ gym_actual.logo.url }}" alt="">{% endif %}
+    <span>{{ gym_actual.nombre }}</span>
+  </div>
+
+  <div class="cuerpo">
+    {% if cliente.foto %}
+      <img class="retrato" src="{{ cliente.foto.url }}" alt="">
+    {% else %}
+      <div class="retrato">{{ cliente.nombre|first|upper }}</div>
+    {% endif %}
+
+    <div class="datos">
+      <div class="rotulo">Socio</div>
+      <div class="nombre">{{ cliente.nombre }}</div>
+      <div class="numero">{{ cliente.numero_usuario }}</div>
+      <div class="pie">
+        {% if cliente.membresia_vigente %}
+          Vigente hasta <b>{{ cliente.membresia_vigente.fin|date:"d/m/Y" }}</b>
+        {% else %}
+          Sin membresia vigente
+        {% endif %}
+        {% if cliente.sucursal %}<br>{{ cliente.sucursal.nombre }}{% endif %}
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="barra-acciones">
+  <button type="button" class="principal" onclick="window.print()">
+    Imprimir o guardar PDF
+  </button>
+  <a href="{% url 'clientes:cliente_detail' cliente.pk %}">Volver a la ficha</a>
+</div>
+
+<p class="nota">
+  Al imprimir, elige <b>Guardar como PDF</b> para mandarla por WhatsApp o correo.
+  El numero grande es el que el socio teclea en el acceso.
+</p>
+
+</body>
+</html>
