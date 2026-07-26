@@ -1,5 +1,4 @@
 from django import forms
-from django.utils.html import format_html, format_html_join
 
 from core.forms import GymModelForm, SinSufijoMixin
 from core.models import Sucursal
@@ -19,40 +18,20 @@ class CategoriaProductoForm(GymModelForm):
         fields = ['nombre', 'descripcion']
 
 
-class ConSugerencias(forms.TextInput):
-    """
-    Caja de texto con lista desplegable de valores ya usados. Es un datalist
-    del navegador: se escoge uno de la lista o se escribe algo que no esta.
-    """
-
-    def __init__(self, sugerencias=(), attrs=None):
-        self.sugerencias = sugerencias
-        super().__init__(attrs)
-
-    def render(self, name, value, attrs=None, renderer=None):
-        lista = f'{name}-sugerencias'
-        attrs = {**(attrs or {}), 'list': lista, 'autocomplete': 'off'}
-        opciones = format_html_join(
-            '', '<option value="{}"></option>', ((s,) for s in self.sugerencias)
-        )
-        return format_html(
-            '{}<datalist id="{}">{}</datalist>',
-            super().render(name, value, attrs, renderer),
-            lista,
-            opciones,
-        )
-
-
 class ProductoForm(GymModelForm):
     """
-    La categoria es un solo campo: despliega las que ya existen y acepta una
-    que no este, creandola junto con el producto.
+    La categoria se elige de una lista. Cuando falta una, el boton de al lado
+    abre un modal para capturarla: se agrega a la lista y se crea al guardar,
+    sin perder lo que ya se llevaba escrito del producto.
     """
 
-    categoria = forms.CharField(
-        max_length=120,
-        label='Categoria',
-        help_text='Elige una de la lista o escribe una nueva.',
+    #: Valor que toma el desplegable cuando la categoria se acaba de capturar
+    #: en el modal y todavia no existe en la base.
+    NUEVA = '__nueva__'
+
+    categoria = forms.CharField(label='Categoria', widget=forms.Select)
+    categoria_nueva = forms.CharField(
+        max_length=120, required=False, widget=forms.HiddenInput
     )
 
     class Meta:
@@ -69,26 +48,29 @@ class ProductoForm(GymModelForm):
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        self.fields['categoria'].widget = ConSugerencias(
-            sugerencias=self._existentes(),
-            attrs={'placeholder': 'Ej. Suplementos'},
-        )
-        # Al editar, el campo llega con el id de la categoria: se cambia por su
-        # nombre, que es lo que la caja de texto sabe mostrar.
+        self.fields['categoria'].widget.choices = self._opciones()
+        # Al editar, el campo llega con el objeto: el desplegable trabaja con ids.
         if self.instance.pk and self.instance.categoria_id:
-            self.initial['categoria'] = self.instance.categoria.nombre
+            self.initial['categoria'] = str(self.instance.categoria_id)
 
-    def _existentes(self):
+    def _opciones(self):
+        opciones = [('', 'Elige una categoria')]
         if self.gym is None:
-            return []
-        return list(
-            CategoriaProducto.objects.filter(gym=self.gym, activo=True)
+            return opciones
+        opciones += [
+            (str(pk), nombre)
+            for pk, nombre in CategoriaProducto.objects.filter(
+                gym=self.gym, activo=True
+            )
             .order_by('nombre')
-            .values_list('nombre', flat=True)
-        )
-
-    def clean_categoria(self):
-        return (self.cleaned_data['categoria'] or '').strip()
+            .values_list('pk', 'nombre')
+        ]
+        # Al reenviar un formulario con errores hay que conservar la categoria
+        # capturada en el modal, o el desplegable la perderia.
+        pendiente = (self.data.get('categoria_nueva') or '').strip()
+        if pendiente:
+            opciones.append((self.NUEVA, pendiente))
+        return opciones
 
     def _verificar_codigo(self, codigo):
         """
@@ -108,15 +90,39 @@ class ProductoForm(GymModelForm):
     def clean(self):
         datos = super().clean()
         self._verificar_codigo(datos.get('codigo'))
-        nombre = datos.get('categoria')
-        if not nombre:
-            return datos
-        if self.errors:
-            # Algo mas viene mal: no se crea la categoria todavia. Se saca del
-            # diccionario porque el modelo espera un objeto, no el texto.
+
+        valor = datos.get('categoria')
+        if not valor:
             datos.pop('categoria', None)
             return datos
-        datos['categoria'] = self._categoria(nombre)
+
+        if valor == self.NUEVA:
+            nombre = (datos.get('categoria_nueva') or '').strip()
+            if not nombre:
+                self.add_error('categoria', 'Escribe el nombre de la categoria.')
+                datos.pop('categoria', None)
+                return datos
+        else:
+            nombre = None
+
+        # Con errores en otros campos no se crea nada: el formulario se
+        # remuestra y la categoria se creara en el siguiente intento. Se saca
+        # del diccionario porque el modelo espera un objeto, no el texto.
+        if self.errors:
+            datos.pop('categoria', None)
+            return datos
+
+        if nombre is not None:
+            datos['categoria'] = self._categoria(nombre)
+        else:
+            elegida = CategoriaProducto.objects.filter(
+                pk=valor, gym=self.gym, activo=True
+            ).first()
+            if elegida is None:
+                self.add_error('categoria', 'Elige una categoria de la lista.')
+                datos.pop('categoria', None)
+            else:
+                datos['categoria'] = elegida
         return datos
 
     def _get_validation_exclusions(self):
@@ -140,6 +146,16 @@ class ProductoForm(GymModelForm):
             existente.activo = True
             existente.save(update_fields=['activo', 'updated_at'])
         return existente
+
+    # La plantilla pinta los campos en dos bloques: la ficha del producto y lo
+    # que entra a la bodega. Al editar solo existe el primero.
+    EXISTENCIAS = ()
+
+    def ficha(self):
+        return [c for c in self if c.name not in self.EXISTENCIAS]
+
+    def existencias(self):
+        return [self[nombre] for nombre in self.EXISTENCIAS]
 
 
 class ProductoAltaForm(ProductoForm):
@@ -199,15 +215,7 @@ class ProductoAltaForm(ProductoForm):
         self.add_error('sucursal', 'Indica a que sucursal entran las piezas.')
         return datos
 
-    # La plantilla pinta los campos en dos bloques: la ficha del producto y lo
-    # que entra a la bodega.
     EXISTENCIAS = ('cantidad', 'sucursal', 'proveedor')
-
-    def ficha(self):
-        return [c for c in self if c.name not in self.EXISTENCIAS]
-
-    def existencias(self):
-        return [self[nombre] for nombre in self.EXISTENCIAS]
 
 
 class ProveedorForm(GymModelForm):

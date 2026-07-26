@@ -799,6 +799,52 @@ table.o-lista .inactiva td { opacity: .5; }
   color: var(--alerta);
   font-size: 12.5px;
 }
+/* Campo con un boton pegado a su derecha (elegir de la lista o crear). */
+.campo-con-boton { display: flex; gap: 8px; align-items: center; max-width: 440px; }
+.campo-con-boton select { flex: 1; min-width: 0; }
+.campo-con-boton .btn { flex: none; }
+
+.o-modal {
+  border: 1px solid var(--borde);
+  border-radius: var(--r-lg);
+  box-shadow: var(--sombra-lg);
+  padding: 24px;
+  width: min(420px, calc(100vw - 32px));
+  color: var(--tinta);
+  background: var(--panel);
+}
+.o-modal::backdrop { background: rgba(11, 11, 15, .45); }
+.o-modal h2 { font-size: 17px; font-weight: 620; letter-spacing: -.02em; margin: 0 0 4px; }
+.o-modal .ayuda { font-size: 12.5px; color: var(--tinta-3); margin: 0 0 18px; }
+.o-modal label {
+  display: block;
+  font-size: 13px;
+  font-weight: 550;
+  margin-bottom: 6px;
+}
+.o-modal input[type=text] {
+  width: 100%;
+  padding: 9px 12px;
+  border: 1px solid var(--borde-fuerte);
+  border-radius: var(--r-sm);
+  font-size: 14px;
+  font-family: inherit;
+  color: var(--tinta);
+  background: var(--panel);
+}
+.o-modal input[type=text]:focus {
+  outline: none;
+  border-color: var(--acento);
+  box-shadow: 0 0 0 3.5px rgba(var(--acento-rgb), .14);
+}
+.o-modal-error { color: var(--alerta); font-size: 12.5px; margin: 8px 0 0; }
+.o-modal-acciones {
+  margin-top: 20px;
+  display: flex;
+  gap: 10px;
+  justify-content: flex-end;
+}
+
 /* Bloque dentro de un formulario, para separar asuntos distintos. */
 .o-form-grupo {
   margin-top: 26px;

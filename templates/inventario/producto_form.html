@@ -1,9 +1,9 @@
 {% extends 'base.html' %}
 
 {% comment %}
-Alta de producto. Se separa del formulario generico porque agrupa dos cosas
-distintas: la ficha del producto y la entrada de existencias, que por debajo
-levanta una compra.
+Ficha del producto y, en el alta, la entrada de existencias, que por debajo
+levanta una compra. La categoria trae al lado un boton que abre un modal para
+capturar una que falte, sin salir ni perder lo escrito.
 {% endcomment %}
 
 {% block title %}{{ titulo }} - GymPilot{% endblock %}
@@ -18,16 +18,32 @@ levanta una compra.
       <div class="o-mensaje error">{{ form.non_field_errors }}</div>
     {% endif %}
 
-    {% for campo in form.ficha %}{% include 'inventario/_campo.html' %}{% endfor %}
+    {% for campo in form.ficha %}
+      {% if campo.name == 'categoria' %}
+        <p>
+          {{ campo.errors }}
+          {{ campo.label_tag }}
+          <span class="campo-con-boton">
+            {{ campo }}
+            <button type="button" class="btn" id="abrir-categoria">Nueva</button>
+          </span>
+          {% if campo.help_text %}<span class="helptext">{{ campo.help_text }}</span>{% endif %}
+        </p>
+      {% else %}
+        {% include 'inventario/_campo.html' %}
+      {% endif %}
+    {% endfor %}
 
-    <div class="o-form-grupo">
-      <h2>Existencias iniciales</h2>
-      <p class="ayuda">
-        Si capturas una cantidad se registra una compra por ese ingreso, para que
-        el stock y el historial cuadren.
-      </p>
-      {% for campo in form.existencias %}{% include 'inventario/_campo.html' %}{% endfor %}
-    </div>
+    {% if form.existencias %}
+      <div class="o-form-grupo">
+        <h2>Existencias iniciales</h2>
+        <p class="ayuda">
+          Si capturas una cantidad se registra una compra por ese ingreso, para que
+          el stock y el historial cuadren.
+        </p>
+        {% for campo in form.existencias %}{% include 'inventario/_campo.html' %}{% endfor %}
+      </div>
+    {% endif %}
 
     <div class="o-form-acciones">
       <button type="submit" class="btn btn-primario">Guardar</button>
@@ -35,4 +51,79 @@ levanta una compra.
     </div>
   </form>
 </div>
+
+<dialog id="modal-categoria" class="o-modal">
+  <h2>Nueva categoria</h2>
+  <p class="ayuda">Se crea al guardar el producto.</p>
+  <label for="categoria-nombre">Nombre</label>
+  <input type="text" id="categoria-nombre" maxlength="120" placeholder="Ej. Suplementos">
+  <p class="o-modal-error" id="categoria-error" hidden>Escribe un nombre.</p>
+  <div class="o-modal-acciones">
+    <button type="button" class="btn" id="cancelar-categoria">Cancelar</button>
+    <button type="button" class="btn btn-primario" id="guardar-categoria">Agregar</button>
+  </div>
+</dialog>
+
+<script>
+(function () {
+  var modal = document.getElementById('modal-categoria');
+  var lista = document.getElementById('id_categoria');
+  var oculto = document.getElementById('id_categoria_nueva');
+  var caja = document.getElementById('categoria-nombre');
+  var aviso = document.getElementById('categoria-error');
+  var NUEVA = '{{ form.NUEVA }}';
+
+  document.getElementById('abrir-categoria').addEventListener('click', function () {
+    aviso.hidden = true;
+    caja.value = oculto.value || '';
+    modal.showModal();
+    caja.focus();
+  });
+
+  document.getElementById('cancelar-categoria').addEventListener('click', function () {
+    modal.close();
+  });
+
+  document.getElementById('guardar-categoria').addEventListener('click', function () {
+    var nombre = caja.value.trim();
+    if (!nombre) {
+      aviso.hidden = false;
+      caja.focus();
+      return;
+    }
+    // Si ya existe una con ese nombre se elige esa en vez de duplicarla.
+    var repetida = Array.prototype.find.call(lista.options, function (o) {
+      return o.value && o.value !== NUEVA && o.text.toLowerCase() === nombre.toLowerCase();
+    });
+    if (repetida) {
+      lista.value = repetida.value;
+      oculto.value = '';
+    } else {
+      var opcion = Array.prototype.find.call(lista.options, function (o) {
+        return o.value === NUEVA;
+      });
+      if (!opcion) {
+        opcion = new Option(nombre, NUEVA);
+        lista.add(opcion);
+      }
+      opcion.text = nombre;
+      lista.value = NUEVA;
+      oculto.value = nombre;
+    }
+    modal.close();
+  });
+
+  // Al elegir a mano otra de la lista, la capturada en el modal deja de valer.
+  lista.addEventListener('change', function () {
+    if (lista.value !== NUEVA) { oculto.value = ''; }
+  });
+
+  caja.addEventListener('keydown', function (e) {
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      document.getElementById('guardar-categoria').click();
+    }
+  });
+})();
+</script>
 {% endblock %}

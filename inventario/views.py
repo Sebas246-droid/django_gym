@@ -121,7 +121,7 @@ class ProductoCreateView(GymFormMixin, CreateView):
 class ProductoUpdateView(GymFormMixin, UpdateView):
     model = Producto
     form_class = ProductoForm
-    template_name = 'core/form.html'
+    template_name = 'inventario/producto_form.html'
     success_url = reverse_lazy('inventario:producto_list')
     extra_context = {'titulo': 'Editar producto'}
 
