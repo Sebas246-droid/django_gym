@@ -1,7 +1,7 @@
 from django.conf import settings
-from django.conf.urls.static import static
 from django.contrib import admin
-from django.urls import include, path
+from django.urls import include, path, re_path
+from django.views.static import serve
 
 urlpatterns = [
     path('admin/', admin.site.urls),
@@ -13,5 +13,14 @@ urlpatterns = [
     path('', include('core.urls')),
 ]
 
-if settings.DEBUG:
-    urlpatterns += static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)
+# Fotos subidas por los gimnasios. Cuando hay bucket S3/R2 las sirve el bucket
+# y esta ruta sobra; sin bucket las tiene que servir Django, tambien con
+# DEBUG=False, o las imagenes salen rotas en produccion.
+if settings.SERVE_MEDIA:
+    urlpatterns += [
+        re_path(
+            r'^%s(?P<path>.*)$' % settings.MEDIA_URL.lstrip('/'),
+            serve,
+            {'document_root': settings.MEDIA_ROOT},
+        ),
+    ]

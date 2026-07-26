@@ -166,7 +166,10 @@ STATIC_ROOT = BASE_DIR / 'staticfiles'
 STATICFILES_DIRS = [BASE_DIR / 'static']
 
 MEDIA_URL = 'media/'
-MEDIA_ROOT = BASE_DIR / 'media'
+# En Railway conviene apuntar MEDIA_ROOT al punto de montaje de un volumen
+# (por ejemplo /data/media): el disco normal del contenedor se borra en cada
+# redeploy y las fotos se perderian.
+MEDIA_ROOT = Path(os.getenv('MEDIA_ROOT', '') or BASE_DIR / 'media')
 
 # El manifest exige haber corrido collectstatic, asi que solo se usa en
 # produccion. En desarrollo y en las pruebas se sirve directo, sin manifest.
@@ -189,10 +192,24 @@ AWS_STORAGE_BUCKET_NAME = os.getenv('AWS_STORAGE_BUCKET_NAME', '')
 if AWS_STORAGE_BUCKET_NAME:
     AWS_ACCESS_KEY_ID = os.getenv('AWS_ACCESS_KEY_ID', '')
     AWS_SECRET_ACCESS_KEY = os.getenv('AWS_SECRET_ACCESS_KEY', '')
-    AWS_S3_REGION_NAME = os.getenv('AWS_S3_REGION_NAME', '')
     # Endpoint propio para buckets compatibles (Cloudflare R2, MinIO, etc.).
     AWS_S3_ENDPOINT_URL = os.getenv('AWS_S3_ENDPOINT_URL', '') or None
-    AWS_S3_CUSTOM_DOMAIN = os.getenv('AWS_S3_CUSTOM_DOMAIN', '') or None
+    # La region entra en la firma s3v4. R2 no tiene regiones: espera 'auto', y
+    # una region vacia hace que Cloudflare rechace la subida por firma invalida.
+    AWS_S3_REGION_NAME = (
+        os.getenv('AWS_S3_REGION_NAME', '')
+        or ('auto' if AWS_S3_ENDPOINT_URL else None)
+    )
+    # Aqui va SOLO el host. Se acepta pegado con esquema o barra final porque es
+    # como lo copia Cloudflare, y un 'https://' de mas produce urls invalidas
+    # del tipo https://https://bucket.r2.dev/foto.png.
+    AWS_S3_CUSTOM_DOMAIN = (
+        os.getenv('AWS_S3_CUSTOM_DOMAIN', '')
+        .strip()
+        .removeprefix('https://')
+        .removeprefix('http://')
+        .strip('/')
+    ) or None
     # R2 firma con s3v4; es tambien el default de AWS, asi que no estorba.
     AWS_S3_SIGNATURE_VERSION = 's3v4'
     AWS_QUERYSTRING_AUTH = False        # las fotos son publicas, urls limpias
@@ -204,6 +221,10 @@ if AWS_STORAGE_BUCKET_NAME:
 
     if AWS_S3_CUSTOM_DOMAIN:
         MEDIA_URL = f'https://{AWS_S3_CUSTOM_DOMAIN}/'
+
+# Sin bucket, las fotos viven en el disco y las tiene que servir Django: sin
+# esto se guardan bien pero salen rotas en cuanto DEBUG=False.
+SERVE_MEDIA = not AWS_STORAGE_BUCKET_NAME
 
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
