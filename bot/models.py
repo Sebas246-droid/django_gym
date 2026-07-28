@@ -122,21 +122,23 @@ class CodigoVinculacion(TimeStampedModel):
 
 class MedidaCorporal(TimeStampedModel):
     """
-    Peso y estatura para la calculadora. Se guarda el historico en vez de
-    sobrescribir: ver la evolucion es justamente lo que le sirve al socio.
+    Historico de peso. Se guarda cada medicion en vez de sobrescribir: ver la
+    evolucion es justamente lo que le sirve al socio.
+
+    La estatura no vive aqui sino en la ficha: en un adulto no cambia, y tenerla
+    ahi evita volver a preguntarla en cada calculo.
     """
 
     cliente = models.ForeignKey(
         'clientes.Cliente', on_delete=models.CASCADE, related_name='medidas'
     )
     peso_kg = models.DecimalField(max_digits=5, decimal_places=1)
-    estatura_cm = models.PositiveSmallIntegerField()
     fecha = models.DateField(default=timezone.localdate)
 
     class Meta:
         ordering = ['-fecha', '-created_at']
-        verbose_name = 'Medida corporal'
-        verbose_name_plural = 'Medidas corporales'
+        verbose_name = 'Peso registrado'
+        verbose_name_plural = 'Pesos registrados'
 
     def __str__(self):
         return f'{self.cliente}: {self.peso_kg} kg el {self.fecha}'

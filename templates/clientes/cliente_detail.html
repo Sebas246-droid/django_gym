@@ -6,21 +6,19 @@
 {% endblock %}
 {% block encabezado %}{{ cliente.nombre }}{% endblock %}
 
+{% comment %}
+Arriba solo lo que se usa a diario. Credencial y el codigo de Telegram se hacen
+una vez por socio, asi que viven en su ficha de datos y no compiten aqui.
+{% endcomment %}
 {% block acciones %}
   <a href="{% url 'clientes:cliente_update' cliente.pk %}" class="btn">Editar</a>
-  <a href="{% url 'clientes:cliente_credencial' cliente.pk %}" class="btn"
-     target="_blank">Credencial</a>
-  <form method="post" action="{% url 'bot:codigo_vinculacion' cliente.pk %}">
-    {% csrf_token %}
-    <button type="submit" class="btn">Codigo de Telegram</button>
-  </form>
-  <a href="{% url 'clientes:clientemembresia_create' %}?cliente={{ cliente.pk }}"
-     class="btn btn-primario">Vender membresia</a>
   <form method="post" action="{% url 'clientes:asistencia_registrar' cliente.pk %}">
     {% csrf_token %}
     <input type="hidden" name="tipo" value="entrada">
     <button type="submit" class="btn">Registrar entrada</button>
   </form>
+  <a href="{% url 'clientes:clientemembresia_create' %}?cliente={{ cliente.pk }}"
+     class="btn btn-primario">Vender membresia</a>
 {% endblock %}
 
 {% block acciones_derecha %}
@@ -49,6 +47,23 @@
         <tr><th>Correo</th><td>{{ cliente.correo|default:'-' }}</td></tr>
         <tr><th>Sexo</th><td>{{ cliente.get_sexo_display|default:'-' }}</td></tr>
         <tr><th>Nacimiento</th><td>{{ cliente.fecha_nacimiento|default:'-' }}</td></tr>
+        <tr>
+          <th>Estatura</th>
+          <td>{% if cliente.estatura_cm %}{{ cliente.estatura_cm }} cm{% else %}-{% endif %}</td>
+        </tr>
+        <tr>
+          <th>Peso</th>
+          <td>
+            {% if ultimo_peso %}
+              {{ ultimo_peso.peso_kg }} kg
+              <span class="texto-tenue">al {{ ultimo_peso.fecha|date:'d/m/Y' }}</span>
+            {% else %}-{% endif %}
+          </td>
+        </tr>
+        <tr>
+          <th>Actividad</th>
+          <td>{{ cliente.get_nivel_actividad_display|default:'-' }}</td>
+        </tr>
         <tr><th>Sucursal</th><td>{{ cliente.sucursal }}</td></tr>
         <tr>
           <th>Emergencia</th>
@@ -59,6 +74,15 @@
         </tr>
       </tbody>
     </table>
+
+    <div class="o-hoja-acciones">
+      <a href="{% url 'clientes:cliente_credencial' cliente.pk %}" class="btn"
+         target="_blank">Credencial</a>
+      <form method="post" action="{% url 'bot:codigo_vinculacion' cliente.pk %}">
+        {% csrf_token %}
+        <button type="submit" class="btn">Codigo de Telegram</button>
+      </form>
+    </div>
   </div>
 
   <div>

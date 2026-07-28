@@ -16,6 +16,7 @@ from bot.models import (
     CodigoVinculacion,
     MedidaCorporal,
 )
+from clientes.models import NIVELES_ACTIVIDAD
 from entrenamiento.models import Entrenamiento
 
 # --- Menu -----------------------------------------------------------------
@@ -33,13 +34,17 @@ MENU_CANCELAR = [[CANCELAR]]
 
 # --- Calculadora ----------------------------------------------------------
 
-ACTIVIDADES = {
-    'Nada o casi nada': Decimal('1.2'),
-    '1 a 3 dias por semana': Decimal('1.375'),
-    '3 a 5 dias por semana': Decimal('1.55'),
-    '6 o 7 dias por semana': Decimal('1.725'),
+#: Cuanto multiplica cada nivel al gasto en reposo.
+FACTORES = {
+    'sedentario': Decimal('1.2'),
+    'ligero': Decimal('1.375'),
+    'moderado': Decimal('1.55'),
+    'intenso': Decimal('1.725'),
 }
-MENU_ACTIVIDAD = [[texto] for texto in ACTIVIDADES] + [[CANCELAR]]
+#: El texto del boton lleva al valor que se guarda en la ficha.
+ACTIVIDAD_POR_TEXTO = {texto: valor for valor, texto in NIVELES_ACTIVIDAD}
+
+MENU_ACTIVIDAD = [[texto] for texto in ACTIVIDAD_POR_TEXTO] + [[CANCELAR]]
 MENU_SEXO = [['Hombre', 'Mujer'], [CANCELAR]]
 
 PASO_PESO = 'peso'
@@ -228,13 +233,19 @@ def _entrenamientos(enlace):
 
 
 def _preguntas_pendientes(cliente):
-    """Solo se pregunta lo que no esta en la ficha."""
-    pasos = [PASO_PESO, PASO_ESTATURA]
+    """
+    Solo se pregunta lo que no esta en la ficha. Con el socio bien capturado
+    queda una sola pregunta: el peso, que es lo unico que cambia seguido.
+    """
+    pasos = [PASO_PESO]
+    if cliente.estatura_cm is None:
+        pasos.append(PASO_ESTATURA)
     if cliente.fecha_nacimiento is None:
         pasos.append(PASO_EDAD)
     if cliente.sexo not in ('M', 'F'):
         pasos.append(PASO_SEXO)
-    pasos.append(PASO_ACTIVIDAD)
+    if not cliente.nivel_actividad:
+        pasos.append(PASO_ACTIVIDAD)
     return pasos
 
 
@@ -289,8 +300,8 @@ def _leer(paso, texto):
         return None, 'No entendi.'
 
     if paso == PASO_ACTIVIDAD:
-        if texto in ACTIVIDADES:
-            return texto, None
+        if texto in ACTIVIDAD_POR_TEXTO:
+            return ACTIVIDAD_POR_TEXTO[texto], None
         return None, 'Elige una de las opciones.'
 
     try:
@@ -323,23 +334,29 @@ def _edad(cliente, datos):
 
 def _resultado(cliente, datos):
     peso = Decimal(datos[PASO_PESO])
-    estatura = Decimal(datos[PASO_ESTATURA])
     edad = _edad(cliente, datos)
+    estatura = (
+        Decimal(datos[PASO_ESTATURA])
+        if PASO_ESTATURA in datos
+        else Decimal(cliente.estatura_cm)
+    )
     sexo = datos.get(PASO_SEXO) or cliente.sexo
-    factor = ACTIVIDADES[datos[PASO_ACTIVIDAD]]
+    actividad = datos.get(PASO_ACTIVIDAD) or cliente.nivel_actividad
+
+    # Lo que el socio contesto se queda en su ficha: la proxima vez el bot solo
+    # tiene que preguntarle el peso.
+    _guardar_en_la_ficha(cliente, datos, estatura, sexo, actividad)
+    MedidaCorporal.objects.create(cliente=cliente, peso_kg=peso)
 
     # Mifflin-St Jeor, la formula que mejor estima el gasto en reposo.
     basal = Decimal('10') * peso + Decimal('6.25') * estatura - Decimal('5') * edad
     basal += Decimal('5') if sexo == 'M' else Decimal('-161')
-    mantenimiento = basal * factor
-
-    MedidaCorporal.objects.create(
-        cliente=cliente, peso_kg=peso, estatura_cm=int(estatura)
-    )
+    mantenimiento = basal * FACTORES[actividad]
+    texto_actividad = dict(NIVELES_ACTIVIDAD)[actividad].lower()
 
     return Respuesta(
         f'Con {peso} kg, {estatura:.0f} cm y {edad} anos, entrenando '
-        f'{datos[PASO_ACTIVIDAD].lower()}:\n\n'
+        f'{texto_actividad}:\n\n'
         f'En reposo tu cuerpo gasta <b>{basal:.0f}</b> calorias al dia.\n\n'
         f'Para <b>mantenerte</b>: {mantenimiento:.0f} al dia.\n'
         f'Para <b>bajar</b>: {mantenimiento - 500:.0f} al dia.\n'
@@ -347,3 +364,18 @@ def _resultado(cliente, datos):
         'Es una estimacion, no una indicacion nutricional: para un plan de '
         'verdad consulta a un profesional.'
     )
+
+
+def _guardar_en_la_ficha(cliente, datos, estatura, sexo, actividad):
+    campos = []
+    if PASO_ESTATURA in datos:
+        cliente.estatura_cm = int(estatura)
+        campos.append('estatura_cm')
+    if PASO_SEXO in datos:
+        cliente.sexo = sexo
+        campos.append('sexo')
+    if PASO_ACTIVIDAD in datos:
+        cliente.nivel_actividad = actividad
+        campos.append('nivel_actividad')
+    if campos:
+        cliente.save(update_fields=campos + ['updated_at'])

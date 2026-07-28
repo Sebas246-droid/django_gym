@@ -24,6 +24,16 @@ class Membresia(GymModel):
         return f'{self.nombre} ({self.duracion_dias} dias)'
 
 
+#: Cuanto entrena a la semana. Multiplica el gasto en reposo para estimar el
+#: consumo diario, asi que el valor guardado no cambia aunque cambie el texto.
+NIVELES_ACTIVIDAD = [
+    ('sedentario', 'Nada o casi nada'),
+    ('ligero', '1 a 3 dias por semana'),
+    ('moderado', '3 a 5 dias por semana'),
+    ('intenso', '6 o 7 dias por semana'),
+]
+
+
 class Cliente(GymModel):
     SEXOS = [('M', 'Masculino'), ('F', 'Femenino'), ('O', 'Otro')]
 
@@ -44,6 +54,17 @@ class Cliente(GymModel):
     correo = models.EmailField(blank=True)
     sexo = models.CharField(max_length=1, choices=SEXOS, blank=True)
     fecha_nacimiento = models.DateField(null=True, blank=True)
+    # Datos estables que necesita la calculadora de calorias. Capturarlos al dar
+    # de alta ahorra preguntas despues: el peso es lo unico que cambia seguido.
+    estatura_cm = models.PositiveSmallIntegerField(
+        null=True, blank=True, help_text='En centimetros, por ejemplo 175.'
+    )
+    nivel_actividad = models.CharField(
+        max_length=12,
+        choices=NIVELES_ACTIVIDAD,
+        blank=True,
+        help_text='Cuanto entrena a la semana.',
+    )
     foto = models.ImageField(upload_to='clientes/', blank=True, null=True)
     nombre_contacto_emergencia = models.CharField(max_length=150, blank=True)
     telefono_contacto_emergencia = models.CharField(max_length=30, blank=True)

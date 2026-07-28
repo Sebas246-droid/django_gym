@@ -139,14 +139,33 @@ class CalculadoraTest(BaseBotTest):
         self.assertIn('bajar', final.texto)
         self.assertIn('no una indicacion nutricional', final.texto.lower())
 
-    def test_guarda_la_medida(self):
+    def test_guarda_el_peso_como_historico(self):
         self._paso(conversacion.CALORIAS)
         self._paso('70')
         self._paso('165')
         self._paso('3 a 5 dias por semana')
         medida = MedidaCorporal.objects.get(cliente=self.cliente)
         self.assertEqual(float(medida.peso_kg), 70.0)
-        self.assertEqual(medida.estatura_cm, 165)
+
+    def test_lo_contestado_se_queda_en_la_ficha(self):
+        """La estatura y la actividad no cambian: no hay que volver a pedirlas."""
+        self._paso(conversacion.CALORIAS)
+        self._paso('70')
+        self._paso('165')
+        self._paso('3 a 5 dias por semana')
+
+        self.cliente.refresh_from_db()
+        self.assertEqual(self.cliente.estatura_cm, 165)
+        self.assertEqual(self.cliente.nivel_actividad, 'moderado')
+
+    def test_con_la_ficha_completa_solo_pregunta_el_peso(self):
+        Cliente.objects.filter(pk=self.cliente.pk).update(
+            estatura_cm=165, nivel_actividad='moderado'
+        )
+        self.assertIn('kilos', self._paso(conversacion.CALORIAS).texto)
+        final = self._paso('70')
+        self.assertIn('mantenerte', final.texto)
+        self.assertIn('165 cm', final.texto)
 
     def test_el_numero_fuera_de_rango_se_rechaza(self):
         self._paso(conversacion.CALORIAS)
@@ -263,6 +282,37 @@ class PanelTest(BaseBotTest):
         )
         r = self.client.post(reverse('bot:codigo_vinculacion', args=[ajeno.pk]))
         self.assertEqual(r.status_code, 404)
+
+    def test_la_ficha_captura_lo_que_necesita_la_calculadora(self):
+        r = self.client.post(
+            reverse('clientes:cliente_update', args=[self.cliente.pk]),
+            {
+                'nombre': 'Ana Torres', 'sucursal': self.sucursal.pk,
+                'sexo': 'F', 'fecha_nacimiento': '1996-01-01',
+                'estatura_cm': '165', 'nivel_actividad': 'moderado',
+                'peso_kg': '70.5',
+            },
+        )
+        self.assertEqual(r.status_code, 302)
+
+        self.cliente.refresh_from_db()
+        self.assertEqual(self.cliente.estatura_cm, 165)
+        self.assertEqual(self.cliente.nivel_actividad, 'moderado')
+        self.assertEqual(
+            float(MedidaCorporal.objects.get(cliente=self.cliente).peso_kg), 70.5
+        )
+
+    def test_reeditar_la_ficha_no_llena_el_historico(self):
+        datos = {
+            'nombre': 'Ana Torres', 'sucursal': self.sucursal.pk, 'peso_kg': '70',
+        }
+        url = reverse('clientes:cliente_update', args=[self.cliente.pk])
+        self.client.post(url, datos)
+        self.client.post(url, {**datos, 'peso_kg': '71'})
+
+        medidas = MedidaCorporal.objects.filter(cliente=self.cliente)
+        self.assertEqual(medidas.count(), 1)
+        self.assertEqual(float(medidas.first().peso_kg), 71.0)
 
     def test_la_configuracion_carga(self):
         r = self.client.get(reverse('bot:configuracion'))

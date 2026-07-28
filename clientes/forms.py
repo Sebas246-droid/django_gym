@@ -1,11 +1,34 @@
 from django import forms
+from django.utils import timezone
 
-from clientes.models import Asistencia, Cliente, ClienteMembresia, Membresia
+from clientes.models import (
+    NIVELES_ACTIVIDAD,
+    Asistencia,
+    Cliente,
+    ClienteMembresia,
+    Membresia,
+)
 from core.forms import GymModelForm
 from core.models import Sucursal
 
 
 class ClienteForm(GymModelForm):
+    """
+    La ficha guarda tambien lo que necesita la calculadora de calorias. Sexo,
+    nacimiento, estatura y actividad casi no cambian: capturarlos aqui hace que
+    despues el bot solo tenga que preguntar el peso.
+    """
+
+    peso_kg = forms.DecimalField(
+        max_digits=5,
+        decimal_places=1,
+        required=False,
+        min_value=25,
+        max_value=300,
+        label='Peso de hoy (kg)',
+        help_text='Se guarda como historico. Puedes dejarlo vacio.',
+    )
+
     class Meta:
         model = Cliente
         fields = [
@@ -15,11 +38,42 @@ class ClienteForm(GymModelForm):
             'correo',
             'sexo',
             'fecha_nacimiento',
+            'estatura_cm',
+            'nivel_actividad',
             'foto',
             'nombre_contacto_emergencia',
             'telefono_contacto_emergencia',
         ]
         widgets = {'fecha_nacimiento': forms.DateInput(attrs={'type': 'date'})}
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        # Es un campo con choices, no una relacion: la opcion vacia se cambia
+        # reescribiendo la lista, no con empty_label.
+        self.fields['nivel_actividad'].choices = [
+            ('', 'Sin especificar'), *NIVELES_ACTIVIDAD
+        ]
+        if self.instance.pk:
+            ultimo = self.instance.medidas.first()
+            if ultimo:
+                self.fields['peso_kg'].initial = ultimo.peso_kg
+
+    def save(self, commit=True):
+        cliente = super().save(commit=commit)
+        peso = self.cleaned_data.get('peso_kg')
+        if commit and peso:
+            self._registrar_peso(cliente, peso)
+        return cliente
+
+    def _registrar_peso(self, cliente, peso):
+        """Un registro por dia: reeditar la ficha no llena el historico."""
+        from bot.models import MedidaCorporal
+
+        MedidaCorporal.objects.update_or_create(
+            cliente=cliente,
+            fecha=timezone.localdate(),
+            defaults={'peso_kg': peso},
+        )
 
 
 class MembresiaForm(GymModelForm):

@@ -56,6 +56,8 @@ class ClienteDetailView(GymQuerysetMixin, DetailView):
             'membresia', 'usuario'
         )
         ctx['asistencias'] = self.object.asistencias.select_related('entrenamiento')[:20]
+        # El historico esta ordenado del mas reciente al mas viejo.
+        ctx['ultimo_peso'] = self.object.medidas.first()
         return ctx
 
 

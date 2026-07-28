@@ -799,6 +799,16 @@ table.o-lista .inactiva td { opacity: .5; }
   color: var(--alerta);
   font-size: 12.5px;
 }
+/* Acciones al pie de una hoja: las que no ameritan estar en la cabecera. */
+.o-hoja-acciones {
+  margin-top: 18px;
+  padding-top: 16px;
+  border-top: 1px solid var(--borde);
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
 /* Pasos numerados de una guia de configuracion. */
 .o-pasos { margin: 0 0 20px; padding-left: 20px; color: var(--tinta-2); font-size: 14px; }
 .o-pasos li { margin-bottom: 8px; }
