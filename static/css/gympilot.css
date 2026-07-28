@@ -233,6 +233,16 @@ button { font-family: inherit; }
 .btn-peligro { color: var(--alerta); }
 .btn-peligro:hover { background: var(--alerta-fondo); border-color: var(--alerta-borde); }
 
+/* Azul de Telegram: se reconoce de un vistazo entre los demas botones. */
+.btn-telegram {
+  background: #229ED9;
+  border-color: transparent;
+  color: #fff;
+  font-weight: 560;
+  box-shadow: 0 1px 2px rgba(11, 11, 15, .1);
+}
+.btn-telegram:hover { background: #229ED9; filter: brightness(1.07); border-color: transparent; }
+
 .btn-enlace {
   border: 0;
   background: none;
@@ -799,16 +809,6 @@ table.o-lista .inactiva td { opacity: .5; }
   color: var(--alerta);
   font-size: 12.5px;
 }
-/* Acciones al pie de una hoja: las que no ameritan estar en la cabecera. */
-.o-hoja-acciones {
-  margin-top: 18px;
-  padding-top: 16px;
-  border-top: 1px solid var(--borde);
-  display: flex;
-  gap: 8px;
-  flex-wrap: wrap;
-}
-
 /* Pasos numerados de una guia de configuracion. */
 .o-pasos { margin: 0 0 20px; padding-left: 20px; color: var(--tinta-2); font-size: 14px; }
 .o-pasos li { margin-bottom: 8px; }
