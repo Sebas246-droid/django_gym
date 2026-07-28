@@ -23,6 +23,7 @@ MENU_POR_VISTA = {
 }
 
 MENU_POR_APP = {
+    'bot': 'bot',
     'clientes': 'clientes',
     'entrenamiento': 'entrenamientos',
     'inventario': 'inventario',

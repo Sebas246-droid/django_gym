@@ -1,0 +1,77 @@
+{% extends 'base.html' %}
+
+{% block title %}Bot de Telegram - GymPilot{% endblock %}
+{% block migas %}/ <span>Bot de Telegram</span>{% endblock %}
+{% block encabezado %}Bot de Telegram{% endblock %}
+
+{% block acciones_derecha %}
+  {% if bottelegram.activo and bottelegram.usuario_bot %}
+    <span class="pill pill-ok">Conectado como @{{ bottelegram.usuario_bot }}</span>
+  {% else %}
+    <span class="pill pill-alerta">Sin conectar</span>
+  {% endif %}
+{% endblock %}
+
+{% block content %}
+<div class="rejilla-detalle">
+
+  <div class="o-hoja">
+    <h2>1. Crea tu bot en Telegram</h2>
+    <ol class="o-pasos">
+      <li>Abre Telegram y busca <b>@BotFather</b>.</li>
+      <li>Mandale <b>/newbot</b> y sigue las dos preguntas: nombre y usuario.</li>
+      <li>Te responde con un <b>token</b>. Copialo y pegalo aqui abajo.</li>
+    </ol>
+
+    <form method="post" class="o-form">
+      {% csrf_token %}
+      {{ form.as_p }}
+      <div class="o-form-acciones">
+        <button type="submit" class="btn btn-primario">Guardar token</button>
+      </div>
+    </form>
+  </div>
+
+  <div class="o-hoja">
+    <h2>2. Conecta el bot</h2>
+    <p class="texto-tenue">
+      Al conectarlo le decimos a Telegram que nos mande aqui los mensajes de tus
+      socios. Mientras no lo conectes, el bot no responde.
+    </p>
+
+    {% if bottelegram.token %}
+      <div class="o-form-acciones">
+        {% if bottelegram.activo and bottelegram.usuario_bot %}
+          <form method="post" action="{% url 'bot:conectar' %}">
+            {% csrf_token %}
+            <button type="submit" class="btn">Reconectar</button>
+          </form>
+          <form method="post" action="{% url 'bot:desconectar' %}">
+            {% csrf_token %}
+            <button type="submit" class="btn btn-peligro">Desconectar</button>
+          </form>
+        {% else %}
+          <form method="post" action="{% url 'bot:conectar' %}">
+            {% csrf_token %}
+            <button type="submit" class="btn btn-primario">Conectar ahora</button>
+          </form>
+        {% endif %}
+      </div>
+    {% else %}
+      <p class="o-vacio">Guarda primero el token.</p>
+    {% endif %}
+
+    <h2 style="margin-top:26px">3. Vincula a tus socios</h2>
+    <p class="texto-tenue">
+      Cada socio se vincula una vez. En su ficha hay un boton
+      <b>Codigo de Telegram</b>: se lo dictas y el lo escribe en el bot. Dura
+      15 minutos y sirve una sola vez.
+    </p>
+    <p class="texto-tenue">
+      El codigo es lo que garantiza que el chat queda atado a la persona correcta.
+      Sin el, cualquiera podria consultar los pagos de otro socio.
+    </p>
+  </div>
+
+</div>
+{% endblock %}

@@ -59,6 +59,7 @@ INSTALLED_APPS = [
 
     'core',
     'accounts',
+    'bot',
     'clientes',
     'entrenamiento',
     'inventario',

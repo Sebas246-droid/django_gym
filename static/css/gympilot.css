@@ -799,6 +799,11 @@ table.o-lista .inactiva td { opacity: .5; }
   color: var(--alerta);
   font-size: 12.5px;
 }
+/* Pasos numerados de una guia de configuracion. */
+.o-pasos { margin: 0 0 20px; padding-left: 20px; color: var(--tinta-2); font-size: 14px; }
+.o-pasos li { margin-bottom: 8px; }
+.o-pasos b { color: var(--tinta); font-weight: 600; }
+
 /* Mismo hueco que un campo normal, para bloques que no caben en un <p>. */
 .o-form .o-campo { margin: 0 0 18px; }
 

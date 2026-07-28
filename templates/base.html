@@ -77,6 +77,9 @@
           <a href="{% url 'core:sitio' %}" class="{% if menu == 'sitio' %}activo{% endif %}">
             {% include 'core/_icono.html' with nombre='sitio' %} Sitio web
           </a>
+          <a href="{% url 'bot:configuracion' %}" class="{% if menu == 'bot' %}activo{% endif %}">
+            {% include 'core/_icono.html' with nombre='bot' %} Bot de Telegram
+          </a>
         {% endif %}
       {% endif %}
 
