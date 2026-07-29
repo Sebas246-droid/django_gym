@@ -1,16 +1,21 @@
 """Pruebas del punto de venta."""
 
+from datetime import timedelta
+
 from django.contrib.auth import get_user_model
 from django.contrib.auth.models import Group
 from django.core.management import call_command
+from django.db.models import Sum
+from django.db.utils import IntegrityError
 from django.test import TestCase
 from django.urls import reverse
+from django.utils import timezone
 
-from clientes.models import Cliente
+from clientes.models import Cliente, ClienteMembresia, Membresia
 from core.models import Gym, Plan, Sucursal
 from core.roles import RECEPCION
 from inventario.models import CategoriaProducto, InventarioSucursal, Producto
-from ventas.models import Venta
+from ventas.models import Venta, VentaDetalle
 
 User = get_user_model()
 
@@ -213,3 +218,115 @@ class PuntoDeVentaTest(TestCase):
         )
 
         self.assertEqual(Venta.objects.get().total, 500)
+
+
+class MembresiaEnCajaTest(PuntoDeVentaTest):
+    """Una membresia se cobra en el mostrador como cualquier otra cosa."""
+
+    @classmethod
+    def setUpTestData(cls):
+        super().setUpTestData()
+        cls.membresia = Membresia.objects.create(
+            gym=cls.gym, nombre='Mensual', precio=600, duracion_dias=30
+        )
+        cls.socio = Cliente.objects.create(
+            gym=cls.gym, sucursal=cls.sucursal, nombre='Ana Torres'
+        )
+
+    def agregar_membresia(self):
+        return self.client.post(
+            reverse('ventas:pos_agregar_membresia', args=[self.membresia.pk])
+        )
+
+    def cobrar(self, **extra):
+        return self.client.post(
+            reverse('ventas:pos_cobrar'),
+            {'metodo_pago': 'efectivo', 'descuento': '0', **extra},
+        )
+
+    def test_se_agrega_al_carrito_con_su_precio(self):
+        self.agregar_membresia()
+        linea = self.carrito().detalles.get()
+        self.assertEqual(linea.membresia, self.membresia)
+        self.assertIsNone(linea.producto)
+        self.assertEqual(linea.precio, 600)
+
+    def test_al_cobrar_se_le_asigna_al_socio(self):
+        self.agregar_membresia()
+        self.cobrar(cliente=self.socio.pk)
+
+        venta = Venta.objects.get()
+        self.assertEqual(venta.estado, Venta.CONFIRMADA)
+        asignada = ClienteMembresia.objects.get(cliente=self.socio)
+        self.assertEqual(asignada.membresia, self.membresia)
+        self.assertEqual(asignada.precio, 600)
+        self.assertEqual(asignada.venta_detalle, venta.detalles.get())
+
+    def test_sin_socio_no_se_cobra(self):
+        self.agregar_membresia()
+        self.cobrar()
+
+        self.assertEqual(Venta.objects.get().estado, Venta.BORRADOR)
+        self.assertFalse(ClienteMembresia.objects.exists())
+
+    def test_no_gasta_stock(self):
+        self.agregar_membresia()
+        self.agregar()
+        self.cobrar(cliente=self.socio.pk)
+
+        self.assertEqual(self.producto.stock_en(self.sucursal), 9)
+        self.assertEqual(Venta.objects.get().total, 1100)
+
+    def test_dos_periodos_se_encadenan(self):
+        """Cantidad 2 son dos meses seguidos, no dos membresias encimadas."""
+        self.agregar_membresia()
+        self.agregar_membresia()
+        self.cobrar(cliente=self.socio.pk)
+
+        primera, segunda = ClienteMembresia.objects.filter(
+            cliente=self.socio
+        ).order_by('inicio')
+        self.assertEqual(segunda.inicio, primera.fin + timedelta(days=1))
+
+    def test_una_linea_no_puede_ser_las_dos_cosas(self):
+        venta = Venta.objects.create(gym=self.gym, sucursal=self.sucursal)
+        with self.assertRaises(IntegrityError):
+            VentaDetalle.objects.create(
+                venta=venta, producto=self.producto, membresia=self.membresia,
+                cantidad=1, precio=100,
+            )
+
+    def test_una_linea_vacia_tampoco(self):
+        venta = Venta.objects.create(gym=self.gym, sucursal=self.sucursal)
+        with self.assertRaises(IntegrityError):
+            VentaDetalle.objects.create(venta=venta, cantidad=1, precio=100)
+
+    def test_el_dinero_no_se_cuenta_dos_veces(self):
+        """Su cobro ya esta en la venta: sumarlo aparte duplicaria el dia."""
+        self.agregar_membresia()
+        self.cobrar(cliente=self.socio.pk)
+
+        hoy = timezone.localdate()
+        aparte = ClienteMembresia.cobradas_aparte(self.gym, hoy)
+        self.assertFalse(aparte.exists())
+
+        ingreso_mostrador = Venta.objects.filter(
+            gym=self.gym, fecha__date=hoy, estado=Venta.CONFIRMADA
+        ).aggregate(t=Sum('total'))['t']
+        total_del_dia = ingreso_mostrador + sum(cm.total for cm in aparte)
+        self.assertEqual(total_del_dia, 600)
+
+    def test_la_cobrada_por_su_pantalla_si_cuenta_aparte(self):
+        ClienteMembresia.objects.create(
+            gym=self.gym, cliente=self.socio, membresia=self.membresia, precio=600
+        )
+        aparte = ClienteMembresia.cobradas_aparte(self.gym, timezone.localdate())
+        self.assertEqual(sum(cm.total for cm in aparte), 600)
+
+    def test_una_cancelada_no_cuenta(self):
+        ClienteMembresia.objects.create(
+            gym=self.gym, cliente=self.socio, membresia=self.membresia,
+            precio=600, estado='cancelada',
+        )
+        aparte = ClienteMembresia.cobradas_aparte(self.gym, timezone.localdate())
+        self.assertFalse(aparte.exists())

@@ -60,34 +60,89 @@ class Venta(GymModel):
         return sum(d.cantidad for d in self.detalles.all())
 
     def stock_suficiente(self):
-        """Devuelve la lista de detalles que no tienen stock disponible."""
+        """Los detalles sin stock disponible. Las membresias no gastan stock."""
         faltantes = []
-        for detalle in self.detalles.select_related('producto'):
+        for detalle in self.detalles.select_related('producto').filter(
+            producto__isnull=False
+        ):
             if detalle.producto.stock_en(self.sucursal) < detalle.cantidad:
                 faltantes.append(detalle)
         return faltantes
+
+    @property
+    def tiene_membresias(self):
+        return self.detalles.filter(membresia__isnull=False).exists()
 
     def confirmar(self):
         if self.estado == self.CONFIRMADA:
             return False, 'La venta ya estaba confirmada.'
         if not self.detalles.exists():
-            return False, 'La venta no tiene productos.'
+            return False, 'La venta no tiene nada que cobrar.'
+        # Sin socio no hay a quien asignarle la membresia que se esta cobrando.
+        if self.tiene_membresias and self.cliente_id is None:
+            return False, 'Elige al socio: la venta lleva una membresia.'
         faltantes = self.stock_suficiente()
         if faltantes:
             nombres = ', '.join(str(d.producto) for d in faltantes)
             return False, f'Sin stock suficiente: {nombres}'
-        for detalle in self.detalles.all():
-            InventarioSucursal.mover(detalle.producto, self.sucursal, -detalle.cantidad)
+
+        for detalle in self.detalles.select_related('producto', 'membresia'):
+            if detalle.es_membresia:
+                self._asignar_membresia(detalle)
+            else:
+                InventarioSucursal.mover(
+                    detalle.producto, self.sucursal, -detalle.cantidad
+                )
+
         self.estado = self.CONFIRMADA
         self.recalcular_total()
         self.save(update_fields=['estado', 'updated_at'])
         return True, 'Venta confirmada.'
 
+    def _asignar_membresia(self, detalle):
+        """
+        Le da al socio la membresia que acaba de pagar. Una linea con cantidad
+        mayor a uno son periodos seguidos, encadenados uno tras otro.
+        """
+        from clientes.models import ClienteMembresia
+
+        for _ in range(detalle.cantidad):
+            ClienteMembresia.objects.create(
+                gym=self.gym,
+                cliente=self.cliente,
+                membresia=detalle.membresia,
+                inicio=self.cliente.inicio_siguiente_membresia,
+                precio=detalle.precio,
+                metodo_pago=self.metodo_pago,
+                fecha_pago=self.fecha,
+                usuario=self.usuario,
+                venta_detalle=detalle,
+            )
+
 
 class VentaDetalle(TimeStampedModel):
+    """
+    Una linea de la venta: un producto o una membresia, nunca las dos.
+
+    Una membresia tambien es una venta, asi que se cobra por aqui en vez de
+    llevar su dinero aparte. La diferencia es lo que pasa al confirmar: el
+    producto descuenta stock y la membresia se le asigna al socio.
+    """
+
     venta = models.ForeignKey(Venta, on_delete=models.CASCADE, related_name='detalles')
     producto = models.ForeignKey(
-        Producto, on_delete=models.PROTECT, related_name='ventas_detalle'
+        Producto,
+        on_delete=models.PROTECT,
+        related_name='ventas_detalle',
+        null=True,
+        blank=True,
+    )
+    membresia = models.ForeignKey(
+        'clientes.Membresia',
+        on_delete=models.PROTECT,
+        related_name='ventas_detalle',
+        null=True,
+        blank=True,
     )
     cantidad = models.PositiveIntegerField(default=1)
     precio = models.DecimalField(max_digits=10, decimal_places=2, default=0)
@@ -95,9 +150,28 @@ class VentaDetalle(TimeStampedModel):
     class Meta:
         verbose_name = 'Detalle de venta'
         verbose_name_plural = 'Detalles de venta'
+        constraints = [
+            # La base tambien lo exige: una linea sin nada, o con las dos cosas,
+            # no significa nada y romperia el cobro.
+            models.CheckConstraint(
+                condition=(
+                    models.Q(producto__isnull=False, membresia__isnull=True)
+                    | models.Q(producto__isnull=True, membresia__isnull=False)
+                ),
+                name='detalle_producto_o_membresia',
+            )
+        ]
 
     def __str__(self):
-        return f'{self.producto} x{self.cantidad}'
+        return f'{self.concepto} x{self.cantidad}'
+
+    @property
+    def concepto(self):
+        return self.producto or self.membresia
+
+    @property
+    def es_membresia(self):
+        return self.membresia_id is not None
 
     @property
     def subtotal(self):

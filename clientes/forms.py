@@ -1,3 +1,5 @@
+from datetime import timedelta
+
 from django import forms
 from django.utils import timezone
 
@@ -190,7 +192,37 @@ class ClienteMembresiaForm(GymModelForm):
                 datos.pop('cliente', None)
             else:
                 datos['cliente'] = elegido
+
+        self._encadenar(datos)
         return datos
+
+    def _encadenar(self, datos):
+        """
+        Si la nueva membresia arrancaria encima de una que sigue corriendo, se
+        recorre al dia siguiente de aquella.
+
+        Renovar antes de que se acabe la anterior es lo normal, y empezar hoy
+        le borraria al socio los dias que ya tenia pagados.
+        """
+        cliente, inicio = datos.get('cliente'), datos.get('inicio')
+        if not isinstance(cliente, Cliente) or not inicio:
+            return
+
+        anterior = (
+            cliente.membresias.filter(
+                activo=True, inicio__lte=inicio, fin__gte=inicio
+            )
+            .exclude(pk=self.instance.pk)
+            .exclude(estado='cancelada')
+            .order_by('-fin')
+            .first()
+        )
+        if anterior is None:
+            return
+
+        datos['inicio'] = anterior.fin + timedelta(days=1)
+        #: Lo lee la vista para avisarselo a quien esta cobrando.
+        self.encadenada_tras = anterior
 
     def _sucursal(self, valor):
         """Con una sola sucursal no se pregunta: se toma esa."""

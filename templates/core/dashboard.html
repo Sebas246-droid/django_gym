@@ -21,15 +21,16 @@
     <div class="cifra">{{ ingresos_hoy|floatformat:0 }}</div>
 
     <div class="hero-chips">
+      {# El desglose es por donde se cobro. El numero en negritas es cuantas. #}
+      <span class="chip">
+        <i class="punto punto-tenue"></i>
+        Mostrador {{ ingreso_mostrador|floatformat:0 }}
+        <b>{{ ventas_hoy }}</b>
+      </span>
       <span class="chip">
         <i class="punto punto-claro"></i>
         Membresias {{ ingreso_membresias|floatformat:0 }}
         <b>{{ membresias_vendidas_hoy }}</b>
-      </span>
-      <span class="chip">
-        <i class="punto punto-tenue"></i>
-        Productos {{ ingreso_productos|floatformat:0 }}
-        <b>{{ ventas_hoy }}</b>
       </span>
     </div>
 

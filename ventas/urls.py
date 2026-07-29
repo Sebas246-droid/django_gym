@@ -8,6 +8,11 @@ urlpatterns = [
     # Punto de venta
     path('pos/', pos.POSView.as_view(), name='pos'),
     path('pos/agregar/<int:pk>/', pos.AgregarView.as_view(), name='pos_agregar'),
+    path(
+        'pos/agregar-membresia/<int:pk>/',
+        pos.AgregarMembresiaView.as_view(),
+        name='pos_agregar_membresia',
+    ),
     path('pos/linea/<int:pk>/', pos.LineaView.as_view(), name='pos_linea'),
     path('pos/cobrar/', pos.CobrarView.as_view(), name='pos_cobrar'),
     path('pos/cancelar/', pos.CancelarView.as_view(), name='pos_cancelar'),

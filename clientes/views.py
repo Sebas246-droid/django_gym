@@ -3,6 +3,7 @@ from django.db.models import Q
 from django.shortcuts import get_object_or_404, redirect
 from django.urls import reverse_lazy
 from django.utils import timezone
+from django.utils.http import url_has_allowed_host_and_scheme
 from django.views.generic import (
     CreateView,
     DetailView,
@@ -153,19 +154,89 @@ class ClienteMembresiaCreateView(GymFormMixin, CreateView):
     template_name = 'clientes/clientemembresia_form.html'
     success_url = reverse_lazy('clientes:clientemembresia_list')
     extra_context = {'titulo': 'Vender membresia'}
+    mensaje_exito = None  # este flujo da su propio aviso, con las fechas
 
     def get_initial(self):
         inicial = super().get_initial()
-        cliente_id = self.request.GET.get('cliente')
-        if cliente_id:
-            inicial['cliente'] = cliente_id
         inicial['inicio'] = timezone.localdate()
+        cliente_id = self.request.GET.get('cliente')
+        if not cliente_id:
+            return inicial
+
+        inicial['cliente'] = cliente_id
+        cliente = Cliente.objects.filter(
+            pk=cliente_id, gym=self.gym, activo=True
+        ).first()
+        if cliente is not None:
+            # Renovando, la fecha que se propone es la que no le quita dias.
+            inicial['inicio'] = cliente.inicio_siguiente_membresia
         return inicial
 
     def form_valid(self, form):
         form.instance.usuario = self.request.user
-        messages.success(self.request, 'Membresia registrada y cobro guardado.')
-        return super().form_valid(form)
+        respuesta = super().form_valid(form)
+
+        anterior = getattr(form, 'encadenada_tras', None)
+        if anterior is None:
+            messages.success(self.request, 'Membresia registrada y cobro guardado.')
+        else:
+            messages.success(
+                self.request,
+                f'Cobro guardado. Como la anterior corre hasta el '
+                f'{anterior.fin.strftime("%d/%m/%Y")}, esta arranca el '
+                f'{self.object.inicio.strftime("%d/%m/%Y")} y vence el '
+                f'{self.object.fin.strftime("%d/%m/%Y")}.',
+            )
+        return respuesta
+
+
+class ClienteMembresiaUpdateView(GymFormMixin, UpdateView):
+    """Corregir un cobro mal capturado: precio, fechas o metodo de pago."""
+
+    model = ClienteMembresia
+    form_class = ClienteMembresiaForm
+    template_name = 'clientes/clientemembresia_form.html'
+    success_url = reverse_lazy('clientes:clientemembresia_list')
+    extra_context = {'titulo': 'Editar venta de membresia'}
+    mensaje_exito = 'Venta de membresia corregida.'
+
+    def get_queryset(self):
+        # Una cancelada ya no se edita: primero habria que reactivarla.
+        return super().get_queryset().exclude(estado='cancelada')
+
+
+class ClienteMembresiaCancelarView(GymRequiredMixin, View):
+    """
+    Cancela el cobro sin borrarlo: el historial del socio y el corte de caja
+    tienen que seguir mostrando que existio y que se deshizo.
+    """
+
+    def post(self, request, pk):
+        venta = get_object_or_404(
+            ClienteMembresia, pk=pk, gym=self.gym, activo=True
+        )
+        if venta.estado == 'cancelada':
+            messages.info(request, 'Esa venta ya estaba cancelada.')
+        else:
+            venta.estado = 'cancelada'
+            venta.save(update_fields=['estado', 'updated_at'])
+            messages.success(
+                request, f'Se cancelo la membresia de {venta.cliente.nombre}.'
+            )
+        return redirect(self._volver(request))
+
+    def _volver(self, request):
+        """
+        La pantalla de origen viaja en el POST, asi que hay que comprobar que
+        apunte a este sitio: si no, cualquiera podria usarla para mandar a un
+        usuario con sesion a una pagina de fuera.
+        """
+        destino = request.POST.get('volver')
+        if destino and url_has_allowed_host_and_scheme(
+            destino, allowed_hosts={request.get_host()}, require_https=request.is_secure()
+        ):
+            return destino
+        return 'clientes:clientemembresia_list'
 
 
 # --- Asistencias ----------------------------------------------------------

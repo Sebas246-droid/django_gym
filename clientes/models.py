@@ -150,6 +150,20 @@ class Cliente(GymModel):
             return None
         return (vigente.fin - timezone.localdate()).days
 
+    @property
+    def inicio_siguiente_membresia(self):
+        """
+        Desde cuando corre la siguiente membresia.
+
+        Si renueva antes de que se le acabe la actual, arranca al dia siguiente
+        de esa: empezar hoy le borraria los dias que le quedaban pagados.
+        """
+        vigente = self.membresia_vigente
+        hoy = timezone.localdate()
+        if vigente is None:
+            return hoy
+        return max(vigente.fin + timedelta(days=1), hoy)
+
 
 class ClienteMembresia(GymModel):
     """Historial completo de compras de membresias (incluye el cobro)."""
@@ -187,6 +201,16 @@ class ClienteMembresia(GymModel):
         related_name='membresias_cobradas',
         null=True,
     )
+    # Puesto cuando se cobro en el punto de venta. Ese dinero ya esta contado
+    # en la venta, asi que sumarlo otra vez aqui duplicaria los ingresos.
+    # Es de uno a varios: una linea con cantidad 2 son dos periodos seguidos.
+    venta_detalle = models.ForeignKey(
+        'ventas.VentaDetalle',
+        on_delete=models.SET_NULL,
+        related_name='membresias_asignadas',
+        null=True,
+        blank=True,
+    )
 
     class Meta:
         ordering = ['-fecha_pago']
@@ -199,6 +223,17 @@ class ClienteMembresia(GymModel):
     @property
     def total(self):
         return self.precio - self.descuento
+
+    @classmethod
+    def cobradas_aparte(cls, gym, dia):
+        """
+        Las cobradas desde su propia pantalla, que son las unicas cuyo dinero
+        no esta ya dentro de una Venta. Contar tambien las del punto de venta
+        duplicaria los ingresos del dia.
+        """
+        return cls.objects.filter(
+            gym=gym, activo=True, fecha_pago__date=dia, venta_detalle__isnull=True
+        ).exclude(estado='cancelada')
 
     def save(self, *args, **kwargs):
         if not self.fin:

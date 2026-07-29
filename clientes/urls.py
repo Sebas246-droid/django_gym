@@ -41,6 +41,16 @@ urlpatterns = [
         views.ClienteMembresiaCreateView.as_view(),
         name='clientemembresia_create',
     ),
+    path(
+        'ventas-membresia/<int:pk>/editar/',
+        views.ClienteMembresiaUpdateView.as_view(),
+        name='clientemembresia_update',
+    ),
+    path(
+        'ventas-membresia/<int:pk>/cancelar/',
+        views.ClienteMembresiaCancelarView.as_view(),
+        name='clientemembresia_cancelar',
+    ),
 
     path('asistencias/', views.AsistenciaListView.as_view(), name='asistencia_list'),
     path('acceso/', views.CheckinView.as_view(), name='checkin'),

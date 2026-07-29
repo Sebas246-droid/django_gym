@@ -43,6 +43,10 @@ class GymQuerysetMixin(GymRequiredMixin):
 class GymFormMixin(GymQuerysetMixin):
     """Inyecta el gym en el formulario y en la instancia guardada."""
 
+    #: Aviso al guardar. Las vistas que dan uno mas concreto lo ponen en None,
+    #: o se apilan dos mensajes diciendo lo mismo.
+    mensaje_exito = 'Registro guardado correctamente.'
+
     def get_form_kwargs(self):
         kwargs = super().get_form_kwargs()
         kwargs['gym'] = self.gym
@@ -50,7 +54,8 @@ class GymFormMixin(GymQuerysetMixin):
 
     def form_valid(self, form):
         form.instance.gym = self.gym
-        messages.success(self.request, 'Registro guardado correctamente.')
+        if self.mensaje_exito:
+            messages.success(self.request, self.mensaje_exito)
         return super().form_valid(form)
 
 

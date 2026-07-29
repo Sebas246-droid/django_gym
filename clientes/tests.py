@@ -399,3 +399,145 @@ class SitioPublicoTest(BaseGymTest):
 
         self.assertContains(respuesta, visible.titulo)
         self.assertNotContains(respuesta, oculta.titulo)
+
+
+class RenovacionTest(BaseGymTest):
+    """Renovar antes de tiempo no debe borrar los dias ya pagados."""
+
+    def url(self):
+        return reverse('clientes:clientemembresia_create')
+
+    def vender(self, cliente, inicio=None):
+        return self.client.post(self.url(), {
+            'cliente': str(cliente.pk),
+            'membresia': self.membresia.pk,
+            'inicio': (inicio or timezone.localdate()).isoformat(),
+            'precio': '600', 'descuento': '0', 'metodo_pago': 'efectivo',
+        })
+
+    def test_sin_membresia_previa_arranca_hoy(self):
+        cliente = self.crear_cliente('Nuevo')
+        self.vender(cliente)
+        self.assertEqual(
+            ClienteMembresia.objects.get(cliente=cliente).inicio, timezone.localdate()
+        )
+
+    def test_renovar_antes_de_vencer_encadena(self):
+        cliente = self.crear_cliente('Renueva')
+        hoy = timezone.localdate()
+        vieja = self.vender_membresia(cliente, hoy - timedelta(days=20))
+
+        self.vender(cliente)
+
+        nueva = ClienteMembresia.objects.filter(cliente=cliente).exclude(
+            pk=vieja.pk
+        ).get()
+        self.assertEqual(nueva.inicio, vieja.fin + timedelta(days=1))
+        self.assertEqual(
+            nueva.fin, nueva.inicio + timedelta(days=self.membresia.duracion_dias)
+        )
+
+    def test_renovar_ya_vencida_arranca_hoy(self):
+        cliente = self.crear_cliente('Vencida')
+        self.vender_membresia(cliente, timezone.localdate() - timedelta(days=90))
+
+        self.vender(cliente)
+
+        nueva = ClienteMembresia.objects.filter(cliente=cliente).order_by('-pk').first()
+        self.assertEqual(nueva.inicio, timezone.localdate())
+
+    def test_la_fecha_que_propone_la_pantalla_no_pierde_dias(self):
+        cliente = self.crear_cliente('Propuesta')
+        vigente = self.vender_membresia(
+            cliente, timezone.localdate() - timedelta(days=20)
+        )
+        respuesta = self.client.get(f'{self.url()}?cliente={cliente.pk}')
+        self.assertEqual(
+            respuesta.context['form'].initial['inicio'], vigente.fin + timedelta(days=1)
+        )
+
+    def test_una_cancelada_no_estorba_la_siguiente(self):
+        cliente = self.crear_cliente('Cancelo')
+        vieja = self.vender_membresia(cliente, timezone.localdate() - timedelta(days=5))
+        ClienteMembresia.objects.filter(pk=vieja.pk).update(estado='cancelada')
+
+        self.vender(cliente)
+
+        nueva = ClienteMembresia.objects.filter(cliente=cliente).exclude(
+            pk=vieja.pk
+        ).get()
+        self.assertEqual(nueva.inicio, timezone.localdate())
+
+
+class EditarCancelarMembresiaTest(BaseGymTest):
+    def setUp(self):
+        super().setUp()
+        self.cliente = self.crear_cliente('Socio')
+        self.venta = self.vender_membresia(self.cliente, timezone.localdate())
+
+    def test_editar_corrige_el_precio(self):
+        respuesta = self.client.post(
+            reverse('clientes:clientemembresia_update', args=[self.venta.pk]),
+            {
+                'cliente': str(self.cliente.pk), 'membresia': self.membresia.pk,
+                'inicio': self.venta.inicio.isoformat(),
+                'precio': '450', 'descuento': '0', 'metodo_pago': 'tarjeta',
+            },
+        )
+        self.assertEqual(respuesta.status_code, 302)
+        self.venta.refresh_from_db()
+        self.assertEqual(self.venta.precio, 450)
+        self.assertEqual(self.venta.metodo_pago, 'tarjeta')
+
+    def test_editar_no_se_encadena_consigo_misma(self):
+        inicio = self.venta.inicio
+        self.client.post(
+            reverse('clientes:clientemembresia_update', args=[self.venta.pk]),
+            {
+                'cliente': str(self.cliente.pk), 'membresia': self.membresia.pk,
+                'inicio': inicio.isoformat(), 'precio': '600',
+                'descuento': '0', 'metodo_pago': 'efectivo',
+            },
+        )
+        self.venta.refresh_from_db()
+        self.assertEqual(self.venta.inicio, inicio)
+
+    def test_cancelar_no_borra_el_registro(self):
+        self.client.post(
+            reverse('clientes:clientemembresia_cancelar', args=[self.venta.pk])
+        )
+        self.venta.refresh_from_db()
+        self.assertEqual(self.venta.estado, 'cancelada')
+        self.assertTrue(ClienteMembresia.objects.filter(pk=self.venta.pk).exists())
+
+    def test_una_cancelada_ya_no_se_edita(self):
+        ClienteMembresia.objects.filter(pk=self.venta.pk).update(estado='cancelada')
+        respuesta = self.client.get(
+            reverse('clientes:clientemembresia_update', args=[self.venta.pk])
+        )
+        self.assertEqual(respuesta.status_code, 404)
+
+    def test_no_se_edita_la_de_otro_gimnasio(self):
+        otro = Gym.objects.create(nombre='Otro', plan=Plan.objects.get(nombre='Basico'))
+        ajeno = Cliente.objects.create(
+            gym=otro, sucursal=Sucursal.objects.get(gym=otro), nombre='Ajeno'
+        )
+        suya = ClienteMembresia.objects.create(
+            gym=otro, cliente=ajeno,
+            membresia=Membresia.objects.create(
+                gym=otro, nombre='X', precio=100, duracion_dias=30
+            ),
+            precio=100,
+        )
+        respuesta = self.client.post(
+            reverse('clientes:clientemembresia_cancelar', args=[suya.pk])
+        )
+        self.assertEqual(respuesta.status_code, 404)
+
+    def test_cancelar_no_redirige_fuera_del_sitio(self):
+        """El destino viaja en el POST: hay que comprobarlo antes de usarlo."""
+        respuesta = self.client.post(
+            reverse('clientes:clientemembresia_cancelar', args=[self.venta.pk]),
+            {'volver': 'https://ejemplo-malicioso.test/'},
+        )
+        self.assertNotIn('ejemplo-malicioso', respuesta['Location'])

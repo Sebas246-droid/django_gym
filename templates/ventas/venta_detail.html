@@ -66,7 +66,12 @@
       <tbody>
         {% for d in detalles %}
           <tr>
-            <td><strong>{{ d.producto }}</strong></td>
+            <td>
+              <strong>{{ d.concepto }}</strong>
+              {% if d.es_membresia %}
+                <span class="pill pill-gris">Membresia</span>
+              {% endif %}
+            </td>
             <td class="num">{{ d.cantidad }}</td>
             <td class="num">{{ d.precio }}</td>
             <td class="num">{{ d.subtotal }}</td>

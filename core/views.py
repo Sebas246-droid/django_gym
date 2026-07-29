@@ -103,24 +103,23 @@ class DashboardView(GymRequiredMixin, TemplateView):
         en_una_semana = hoy + timezone.timedelta(days=7)
 
         # --- Dinero de hoy, con su desglose --------------------------------
-        ingreso_productos = (
-            Venta.objects.filter(
-                gym=gym, fecha__date=hoy, estado=Venta.CONFIRMADA
-            ).aggregate(t=Sum('total'))['t']
-            or 0
+        # El desglose es por donde se cobro, no por que se vendio: una
+        # membresia cobrada en caja ya viene dentro del total de esa venta.
+        ventas_hoy = Venta.objects.filter(
+            gym=gym, fecha__date=hoy, estado=Venta.CONFIRMADA
         )
-        cobros_hoy = ClienteMembresia.objects.filter(
-            gym=gym, activo=True, fecha_pago__date=hoy
-        )
+        ingreso_mostrador = ventas_hoy.aggregate(t=Sum('total'))['t'] or 0
+        cobros_hoy = ClienteMembresia.cobradas_aparte(gym, hoy)
         ingreso_membresias = sum(cm.total for cm in cobros_hoy)
 
-        ctx['ingreso_productos'] = ingreso_productos
+        ctx['ingreso_mostrador'] = ingreso_mostrador
         ctx['ingreso_membresias'] = ingreso_membresias
-        ctx['ingresos_hoy'] = ingreso_productos + ingreso_membresias
-        ctx['membresias_vendidas_hoy'] = cobros_hoy.count()
-        ctx['ventas_hoy'] = Venta.objects.filter(
-            gym=gym, fecha__date=hoy, estado=Venta.CONFIRMADA
-        ).count()
+        ctx['ingresos_hoy'] = ingreso_mostrador + ingreso_membresias
+        ctx['ventas_hoy'] = ventas_hoy.count()
+        # Aqui si cuentan todas: es cuantas se vendieron, no cuanto entro.
+        ctx['membresias_vendidas_hoy'] = ClienteMembresia.objects.filter(
+            gym=gym, activo=True, fecha_pago__date=hoy
+        ).exclude(estado='cancelada').count()
 
         # Ingresos de los ultimos 7 dias, para las barras del encabezado
         barras = []
@@ -133,10 +132,7 @@ class DashboardView(GymRequiredMixin, TemplateView):
                 or 0
             )
             membresias = sum(
-                cm.total
-                for cm in ClienteMembresia.objects.filter(
-                    gym=gym, activo=True, fecha_pago__date=dia
-                )
+                cm.total for cm in ClienteMembresia.cobradas_aparte(gym, dia)
             )
             barras.append({'dia': dia, 'monto': productos + membresias, 'hoy': dia == hoy})
         techo = max([b['monto'] for b in barras] + [1])
@@ -230,6 +226,9 @@ class DashboardView(GymRequiredMixin, TemplateView):
                 venta__gym=gym,
                 venta__estado=Venta.CONFIRMADA,
                 venta__fecha__date__gte=inicio_mes,
+                # Las lineas de membresia no son producto: agruparlas por
+                # nombre las juntaria todas bajo una fila vacia.
+                producto__isnull=False,
             )
             .values('producto__nombre')
             .annotate(piezas=Sum('cantidad'))

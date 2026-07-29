@@ -17,6 +17,7 @@
         <th>Fecha pago</th><th>Cliente</th><th>Membresia</th><th>Vigencia</th>
         <th>Estado</th><th class="num">Precio</th><th class="num">Desc.</th>
         <th class="num">Total</th><th>Metodo</th><th>Cobro</th>
+        <th class="acciones"></th>
       </tr>
     </thead>
     <tbody>
@@ -44,9 +45,20 @@
           <td class="num"><strong>{{ cm.total }}</strong></td>
           <td class="texto-tenue">{{ cm.get_metodo_pago_display }}</td>
           <td class="texto-tenue">{{ cm.usuario|default:'-' }}</td>
+          <td class="acciones">
+            {% if cm.estado != 'cancelada' %}
+              <a href="{% url 'clientes:clientemembresia_update' cm.pk %}"
+                 class="btn-enlace">Editar</a>
+              <form method="post" style="display:inline"
+                    action="{% url 'clientes:clientemembresia_cancelar' cm.pk %}">
+                {% csrf_token %}
+                <button type="submit" class="btn-enlace">Cancelar</button>
+              </form>
+            {% endif %}
+          </td>
         </tr>
       {% empty %}
-        <tr><td colspan="10" class="vacio">Sin registros.</td></tr>
+        <tr><td colspan="11" class="vacio">Sin registros.</td></tr>
       {% endfor %}
     </tbody>
   </table>
