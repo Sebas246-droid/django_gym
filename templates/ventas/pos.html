@@ -34,27 +34,6 @@
       {% endif %}
     </form>
 
-    {% if membresias and not q and not categoria_id %}
-      <h2 class="pos-titulo">Membresias</h2>
-      <div class="pos-rejilla">
-        {% for m in membresias %}
-          <form method="post" action="{% url 'ventas:pos_agregar_membresia' m.pk %}">
-            {% csrf_token %}
-            <button type="submit" class="producto producto-membresia">
-              <span class="foto"><span class="inicial">{{ m.nombre|first|upper }}</span></span>
-              <span class="cat">Membresia</span>
-              <span class="nombre">{{ m.nombre }}</span>
-              <span class="marca">{{ m.duracion_dias }} dias</span>
-              <span class="pie">
-                <span class="precio">{{ m.precio }}</span>
-              </span>
-            </button>
-          </form>
-        {% endfor %}
-      </div>
-      <h2 class="pos-titulo">Productos</h2>
-    {% endif %}
-
     <div class="pos-rejilla">
       {% for p in productos %}
         <form method="post" action="{% url 'ventas:pos_agregar' p.pk %}">
@@ -111,9 +90,7 @@
           <div class="linea">
             <div class="datos">
               <strong>{{ d.concepto }}</strong>
-              <span class="texto-tenue">
-                {% if d.es_membresia %}Membresia &middot; {% endif %}{{ d.precio }} c/u
-              </span>
+              <span class="texto-tenue">{{ d.precio }} c/u</span>
             </div>
             <form method="post" action="{% url 'ventas:pos_linea' d.pk %}" class="cantidad">
               {% csrf_token %}
@@ -138,15 +115,9 @@
       <form method="post" action="{% url 'ventas:pos_cobrar' %}" class="carrito-cobro o-form">
         {% csrf_token %}
 
-        {% if venta.tiene_membresias %}
-          <label for="cliente">Socio <span class="texto-tenue">(obligatorio)</span></label>
-          <select name="cliente" id="cliente" required>
-            <option value="">Elige a quien es la membresia</option>
-        {% else %}
-          <label for="cliente">Cliente <span class="texto-tenue">(opcional)</span></label>
-          <select name="cliente" id="cliente">
-            <option value="">Venta de mostrador</option>
-        {% endif %}
+        <label for="cliente">Cliente <span class="texto-tenue">(opcional)</span></label>
+        <select name="cliente" id="cliente">
+          <option value="">Venta de mostrador</option>
           {% for c in clientes %}
             <option value="{{ c.pk }}">{{ c.numero_usuario }} - {{ c.nombre }}</option>
           {% endfor %}

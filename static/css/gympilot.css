@@ -1084,25 +1084,6 @@ table.o-lista .inactiva td { opacity: .5; }
 }
 .producto .stock { font-size: 12px; color: var(--tinta-3); }
 .producto .stock.sin { color: var(--alerta); font-weight: 550; }
-/* La membresia no es un producto de estante: se distingue sin leerla. */
-.producto-membresia { border-color: rgba(var(--acento-rgb), .45); }
-.producto-membresia .foto {
-  background: rgba(var(--acento-rgb), .07);
-  border-color: rgba(var(--acento-rgb), .2);
-}
-.producto-membresia .foto .inicial { color: var(--acento); }
-.producto-membresia .cat { color: var(--acento); }
-
-.pos-titulo {
-  font-size: 13px;
-  font-weight: 600;
-  letter-spacing: .04em;
-  text-transform: uppercase;
-  color: var(--tinta-3);
-  margin: 0 0 10px;
-}
-.pos-titulo + .pos-rejilla { margin-bottom: 22px; }
-
 .producto.agotado { opacity: .5; cursor: not-allowed; box-shadow: none; }
 .producto.agotado:hover { border-color: var(--borde); box-shadow: none; }
 

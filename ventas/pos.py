@@ -17,7 +17,7 @@ from django.shortcuts import get_object_or_404, redirect
 from django.urls import reverse
 from django.views.generic import TemplateView, View
 
-from clientes.models import Cliente, Membresia
+from clientes.models import Cliente
 from core.mixins import GymRequiredMixin
 from inventario.models import CategoriaProducto, InventarioSucursal, Producto
 from ventas.models import Venta, VentaDetalle
@@ -82,8 +82,6 @@ class POSView(CarritoMixin, TemplateView):
 
         ctx.update({
             'productos': productos,
-            # Una membresia se cobra como cualquier otra cosa del mostrador.
-            'membresias': Membresia.objects.filter(gym=self.gym, activo=True),
             'categorias': CategoriaProducto.objects.filter(gym=self.gym, activo=True),
             'q': q,
             'categoria_id': categoria_id,
@@ -129,29 +127,6 @@ class AgregarView(CarritoMixin, View):
         )
         base = reverse('ventas:pos')
         return f'{base}?{filtros}' if filtros else base
-
-
-class AgregarMembresiaView(AgregarView):
-    """
-    Suma una membresia al carrito. Va aparte del alta de producto porque no
-    toca inventario y porque, a diferencia de un producto, exige saber a que
-    socio se le esta vendiendo.
-    """
-
-    def post(self, request, pk):
-        membresia = get_object_or_404(Membresia, pk=pk, gym=self.gym, activo=True)
-        venta = self.carrito()
-
-        linea = venta.detalles.filter(membresia=membresia).first()
-        if linea:
-            linea.cantidad += 1
-            linea.save(update_fields=['cantidad', 'updated_at'])
-        else:
-            VentaDetalle.objects.create(
-                venta=venta, membresia=membresia, cantidad=1, precio=membresia.precio
-            )
-        venta.recalcular_total()
-        return redirect(self.volver_al_mismo_filtro())
 
 
 class LineaView(CarritoMixin, View):

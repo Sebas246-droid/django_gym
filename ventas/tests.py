@@ -220,8 +220,15 @@ class PuntoDeVentaTest(TestCase):
         self.assertEqual(Venta.objects.get().total, 500)
 
 
-class MembresiaEnCajaTest(PuntoDeVentaTest):
-    """Una membresia se cobra en el mostrador como cualquier otra cosa."""
+class MembresiaComoLineaTest(PuntoDeVentaTest):
+    """
+    Una venta puede llevar una membresia en vez de un producto.
+
+    Hoy no hay pantalla que arme esas lineas — se quitaron del punto de venta —
+    pero el modelo lo sostiene, y estas pruebas cuidan lo que no se puede
+    romper en silencio: que una linea no sea las dos cosas, que al confirmar se
+    le asigne al socio, y que su dinero no se cuente dos veces.
+    """
 
     @classmethod
     def setUpTestData(cls):
@@ -233,55 +240,52 @@ class MembresiaEnCajaTest(PuntoDeVentaTest):
             gym=cls.gym, sucursal=cls.sucursal, nombre='Ana Torres'
         )
 
-    def agregar_membresia(self):
-        return self.client.post(
-            reverse('ventas:pos_agregar_membresia', args=[self.membresia.pk])
+    def venta_con_membresia(self, cantidad=1, cliente=None):
+        venta = Venta.objects.create(
+            gym=self.gym, sucursal=self.sucursal, usuario=self.cajero,
+            cliente=cliente,
         )
-
-    def cobrar(self, **extra):
-        return self.client.post(
-            reverse('ventas:pos_cobrar'),
-            {'metodo_pago': 'efectivo', 'descuento': '0', **extra},
+        VentaDetalle.objects.create(
+            venta=venta, membresia=self.membresia, cantidad=cantidad, precio=600
         )
+        venta.recalcular_total()
+        return venta
 
-    def test_se_agrega_al_carrito_con_su_precio(self):
-        self.agregar_membresia()
-        linea = self.carrito().detalles.get()
-        self.assertEqual(linea.membresia, self.membresia)
-        self.assertIsNone(linea.producto)
-        self.assertEqual(linea.precio, 600)
+    def test_al_confirmar_se_le_asigna_al_socio(self):
+        venta = self.venta_con_membresia(cliente=self.socio)
 
-    def test_al_cobrar_se_le_asigna_al_socio(self):
-        self.agregar_membresia()
-        self.cobrar(cliente=self.socio.pk)
+        ok, _ = venta.confirmar()
 
-        venta = Venta.objects.get()
-        self.assertEqual(venta.estado, Venta.CONFIRMADA)
+        self.assertTrue(ok)
         asignada = ClienteMembresia.objects.get(cliente=self.socio)
         self.assertEqual(asignada.membresia, self.membresia)
         self.assertEqual(asignada.precio, 600)
         self.assertEqual(asignada.venta_detalle, venta.detalles.get())
 
-    def test_sin_socio_no_se_cobra(self):
-        self.agregar_membresia()
-        self.cobrar()
+    def test_sin_socio_no_se_confirma(self):
+        venta = self.venta_con_membresia()
 
-        self.assertEqual(Venta.objects.get().estado, Venta.BORRADOR)
+        ok, mensaje = venta.confirmar()
+
+        self.assertFalse(ok)
+        self.assertIn('socio', mensaje)
         self.assertFalse(ClienteMembresia.objects.exists())
 
     def test_no_gasta_stock(self):
-        self.agregar_membresia()
-        self.agregar()
-        self.cobrar(cliente=self.socio.pk)
+        venta = self.venta_con_membresia(cliente=self.socio)
+        VentaDetalle.objects.create(
+            venta=venta, producto=self.producto, cantidad=1, precio=500
+        )
+        venta.recalcular_total()
+
+        venta.confirmar()
 
         self.assertEqual(self.producto.stock_en(self.sucursal), 9)
-        self.assertEqual(Venta.objects.get().total, 1100)
+        self.assertEqual(Venta.objects.get(pk=venta.pk).total, 1100)
 
     def test_dos_periodos_se_encadenan(self):
         """Cantidad 2 son dos meses seguidos, no dos membresias encimadas."""
-        self.agregar_membresia()
-        self.agregar_membresia()
-        self.cobrar(cliente=self.socio.pk)
+        self.venta_con_membresia(cantidad=2, cliente=self.socio).confirmar()
 
         primera, segunda = ClienteMembresia.objects.filter(
             cliente=self.socio
@@ -303,18 +307,16 @@ class MembresiaEnCajaTest(PuntoDeVentaTest):
 
     def test_el_dinero_no_se_cuenta_dos_veces(self):
         """Su cobro ya esta en la venta: sumarlo aparte duplicaria el dia."""
-        self.agregar_membresia()
-        self.cobrar(cliente=self.socio.pk)
+        self.venta_con_membresia(cliente=self.socio).confirmar()
 
         hoy = timezone.localdate()
         aparte = ClienteMembresia.cobradas_aparte(self.gym, hoy)
         self.assertFalse(aparte.exists())
 
-        ingreso_mostrador = Venta.objects.filter(
+        mostrador = Venta.objects.filter(
             gym=self.gym, fecha__date=hoy, estado=Venta.CONFIRMADA
         ).aggregate(t=Sum('total'))['t']
-        total_del_dia = ingreso_mostrador + sum(cm.total for cm in aparte)
-        self.assertEqual(total_del_dia, 600)
+        self.assertEqual(mostrador + sum(cm.total for cm in aparte), 600)
 
     def test_la_cobrada_por_su_pantalla_si_cuenta_aparte(self):
         ClienteMembresia.objects.create(
@@ -330,3 +332,11 @@ class MembresiaEnCajaTest(PuntoDeVentaTest):
         )
         aparte = ClienteMembresia.cobradas_aparte(self.gym, timezone.localdate())
         self.assertFalse(aparte.exists())
+
+    def test_el_punto_de_venta_ya_no_las_ofrece(self):
+        respuesta = self.client.get(reverse('ventas:pos'))
+
+        self.assertNotIn('membresias', respuesta.context)
+        # El nombre del plan no debe salir en la rejilla (el menu lateral si
+        # dice "Membresias", por eso se busca el nombre y no la palabra).
+        self.assertNotContains(respuesta, self.membresia.nombre)
