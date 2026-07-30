@@ -142,6 +142,33 @@ class Compra(GymModel):
         self.save(update_fields=['estado', 'updated_at'])
         return True
 
+    @classmethod
+    def registrar_entrada(
+        cls, producto, sucursal, cantidad, precio=None, proveedor=None, usuario=None
+    ):
+        """
+        Mercancia que entra de un solo producto, ya confirmada.
+
+        Es el camino corto para lo que mas se repite: llega mas de algo que ya
+        vendes. La compra de varias lineas sigue existiendo para un pedido
+        grande, pero obligar a recorrerla para un producto hacia que nadie la
+        usara y el stock se corrigiera a mano, sin dejar rastro del costo.
+        """
+        compra = cls.objects.create(
+            gym=producto.gym,
+            sucursal=sucursal,
+            proveedor=proveedor,
+            usuario=usuario,
+        )
+        CompraDetalle.objects.create(
+            compra=compra,
+            producto=producto,
+            cantidad=cantidad,
+            precio=producto.precio_compra if precio is None else precio,
+        )
+        compra.confirmar()
+        return compra
+
 
 class CompraDetalle(TimeStampedModel):
     compra = models.ForeignKey(Compra, on_delete=models.CASCADE, related_name='detalles')

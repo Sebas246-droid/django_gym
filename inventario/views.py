@@ -2,13 +2,21 @@ from django.contrib import messages
 from django.db import transaction
 from django.shortcuts import get_object_or_404, redirect
 from django.urls import reverse_lazy
-from django.views.generic import CreateView, DetailView, ListView, UpdateView, View
+from django.views.generic import (
+    CreateView,
+    DetailView,
+    FormView,
+    ListView,
+    UpdateView,
+    View,
+)
 
 from core.mixins import GymFormMixin, GymQuerysetMixin, GymRequiredMixin, SoftDeleteView
 from inventario.forms import (
     CategoriaProductoForm,
     CompraDetalleForm,
     CompraForm,
+    EntradaForm,
     InventarioSucursalForm,
     ProductoAltaForm,
     ProductoForm,
@@ -58,6 +66,11 @@ class CategoriaDeleteView(SoftDeleteView):
 
 
 class ProductoListView(GymQuerysetMixin, ListView):
+    """
+    El catalogo con sus existencias. Antes eran dos pantallas, y nadie quiere
+    ver un producto sin saber cuantos le quedan.
+    """
+
     model = Producto
     template_name = 'inventario/producto_list.html'
     context_object_name = 'productos'
@@ -65,6 +78,89 @@ class ProductoListView(GymQuerysetMixin, ListView):
 
     def get_queryset(self):
         return super().get_queryset().select_related('categoria')
+
+    @property
+    def sucursales(self):
+        return self.gym.sucursales.filter(activo=True).order_by('nombre')
+
+    @property
+    def sucursal(self):
+        """
+        La que se esta viendo. El stock siempre es de una sucursal concreta.
+
+        Una que no exista o sea de otro gimnasio cae a la propia, en vez de
+        dejar la pantalla sin existencias.
+        """
+        pedida = self.request.GET.get('sucursal')
+        if pedida:
+            elegida = self.sucursales.filter(pk=pedida).first()
+            if elegida is not None:
+                return elegida
+        return self.request.user.sucursal or self.sucursales.first()
+
+    def get_context_data(self, **kwargs):
+        ctx = super().get_context_data(**kwargs)
+        sucursal = self.sucursal
+        productos = ctx['productos']
+
+        existencias = {
+            inv.producto_id: inv
+            for inv in InventarioSucursal.objects.filter(
+                sucursal=sucursal, producto__in=productos
+            )
+        }
+        for producto in productos:
+            producto.inventario = existencias.get(producto.pk)
+
+        ctx['sucursales'] = self.sucursales
+        ctx['sucursal'] = sucursal
+        return ctx
+
+
+class EntradaProductoView(GymRequiredMixin, FormView):
+    """
+    Llego mas de algo que ya vendes. Pide cantidad y costo, y deja la compra
+    asentada: asi el stock sube con rastro del dinero, en un solo paso.
+    """
+
+    form_class = EntradaForm
+    template_name = 'core/form.html'
+    success_url = reverse_lazy('inventario:producto_list')
+
+    @property
+    def producto(self):
+        return get_object_or_404(
+            Producto, pk=self.kwargs['pk'], gym=self.gym, activo=True
+        )
+
+    def get_form_kwargs(self):
+        # No es un ModelForm: el gym se pasa a mano, sin GymFormMixin.
+        kwargs = super().get_form_kwargs()
+        kwargs['gym'] = self.gym
+        kwargs['producto'] = self.producto
+        return kwargs
+
+    def get_context_data(self, **kwargs):
+        ctx = super().get_context_data(**kwargs)
+        ctx['titulo'] = f'Entrada de {self.producto.nombre}'
+        return ctx
+
+    def form_valid(self, form):
+        compra = Compra.registrar_entrada(
+            producto=self.producto,
+            sucursal=form.cleaned_data['sucursal'],
+            cantidad=form.cleaned_data['cantidad'],
+            precio=form.cleaned_data.get('precio'),
+            proveedor=form.cleaned_data.get('proveedor'),
+            usuario=self.request.user,
+        )
+        messages.success(
+            self.request,
+            f'Entraron {form.cleaned_data["cantidad"]} de '
+            f'{self.producto.nombre}. Quedan '
+            f'{self.producto.stock_en(compra.sucursal)} en {compra.sucursal}.',
+        )
+        return super().form_valid(form)
 
 
 class ProductoCreateView(GymFormMixin, CreateView):
@@ -81,30 +177,14 @@ class ProductoCreateView(GymFormMixin, CreateView):
         with transaction.atomic():
             respuesta = super().form_valid(form)
             if cantidad:
-                self.compra = self._comprar(
+                self.compra = Compra.registrar_entrada(
                     producto=self.object,
-                    cantidad=cantidad,
                     sucursal=form.cleaned_data['sucursal'],
+                    cantidad=cantidad,
                     proveedor=form.cleaned_data.get('proveedor'),
+                    usuario=self.request.user,
                 )
         return respuesta
-
-    def _comprar(self, producto, cantidad, sucursal, proveedor):
-        """Deja la entrada asentada como compra confirmada, que es la que mueve stock."""
-        compra = Compra.objects.create(
-            gym=self.gym,
-            sucursal=sucursal,
-            proveedor=proveedor,
-            usuario=self.request.user,
-        )
-        CompraDetalle.objects.create(
-            compra=compra,
-            producto=producto,
-            cantidad=cantidad,
-            precio=producto.precio_compra,
-        )
-        compra.confirmar()
-        return compra
 
     def get_success_url(self):
         compra = getattr(self, 'compra', None)
@@ -132,35 +212,17 @@ class ProductoDeleteView(SoftDeleteView):
 
 
 # --- Stock por sucursal ---------------------------------------------------
-
-
-class InventarioListView(GymRequiredMixin, ListView):
-    model = InventarioSucursal
-    template_name = 'inventario/inventario_list.html'
-    context_object_name = 'inventarios'
-
-    def get_queryset(self):
-        qs = InventarioSucursal.objects.filter(
-            producto__gym=self.gym, producto__activo=True
-        ).select_related('producto', 'sucursal')
-        sucursal_id = self.request.GET.get('sucursal')
-        if sucursal_id:
-            qs = qs.filter(sucursal_id=sucursal_id)
-        return qs
-
-    def get_context_data(self, **kwargs):
-        ctx = super().get_context_data(**kwargs)
-        ctx['sucursales'] = self.gym.sucursales.filter(activo=True)
-        ctx['sucursal_id'] = self.request.GET.get('sucursal', '')
-        return ctx
+#
+# La lista de existencias ya no vive aparte: sale junto al producto en
+# ProductoListView. Aqui solo queda corregir un conteo.
 
 
 class InventarioUpdateView(GymRequiredMixin, UpdateView):
     model = InventarioSucursal
     form_class = InventarioSucursalForm
     template_name = 'core/form.html'
-    success_url = reverse_lazy('inventario:inventario_list')
-    extra_context = {'titulo': 'Ajustar inventario'}
+    success_url = reverse_lazy('inventario:producto_list')
+    extra_context = {'titulo': 'Ajustar existencias'}
 
     def get_queryset(self):
         return InventarioSucursal.objects.filter(producto__gym=self.gym)

@@ -261,6 +261,42 @@ button { font-family: inherit; }
 /* Para las acciones dentro de una fila, donde un boton normal pesa de mas. */
 .btn-mini { padding: 5px 11px; font-size: 12.5px; }
 
+/*
+  Menu para lo que se configura una vez. Es un <details>, asi que abre y cierra
+  sin JavaScript.
+*/
+.o-menu { position: relative; display: inline-block; }
+.o-menu > summary { list-style: none; user-select: none; }
+.o-menu > summary::-webkit-details-marker { display: none; }
+.o-menu > summary::after {
+  content: '';
+  width: 5px; height: 5px;
+  margin-left: 2px;
+  border-right: 1.5px solid currentColor;
+  border-bottom: 1.5px solid currentColor;
+  transform: translateY(-2px) rotate(45deg);
+}
+.o-menu-lista {
+  position: absolute;
+  right: 0;
+  top: calc(100% + 6px);
+  z-index: 20;
+  min-width: 168px;
+  padding: 5px;
+  background: var(--panel);
+  border: 1px solid var(--borde);
+  border-radius: var(--r);
+  box-shadow: var(--sombra-lg);
+}
+.o-menu-lista a {
+  display: block;
+  padding: 8px 11px;
+  border-radius: var(--r-sm);
+  font-size: 13.5px;
+  color: var(--tinta-2);
+}
+.o-menu-lista a:hover { background: #F3F3F7; color: var(--tinta); }
+
 .btn-grande { padding: 11px 20px; font-size: 15px; border-radius: var(--r); }
 
 /* --- Tarjetas ------------------------------------------------------------ */

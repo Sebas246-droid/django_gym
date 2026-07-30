@@ -1,16 +1,39 @@
 {% extends 'base.html' %}
 
-{% block title %}Productos - GymPilot{% endblock %}
-{% block migas %}/ <span>Productos</span>{% endblock %}
-{% block encabezado %}Productos{% endblock %}
+{% block title %}Inventario - GymPilot{% endblock %}
+{% block migas %}/ <span>Inventario</span>{% endblock %}
+{% block encabezado %}Inventario{% endblock %}
 
+{% comment %}
+Arriba solo lo de todos los dias. Categorias y proveedores se configuran una
+vez y pesaban igual que dar de alta un producto, asi que bajan a un menu.
+{% endcomment %}
 {% block acciones %}
-  <a href="{% url 'inventario:producto_create' %}" class="btn btn-primario">Nuevo producto</a>
-  <a href="{% url 'inventario:inventario_list' %}" class="btn">Stock</a>
   <a href="{% url 'inventario:compra_list' %}" class="btn">Compras</a>
   {% if es_admin %}
-    <a href="{% url 'inventario:categoria_list' %}" class="btn">Categorias</a>
-    <a href="{% url 'inventario:proveedor_list' %}" class="btn">Proveedores</a>
+    <details class="o-menu">
+      <summary class="btn">Mas</summary>
+      <div class="o-menu-lista">
+        <a href="{% url 'inventario:categoria_list' %}">Categorias</a>
+        <a href="{% url 'inventario:proveedor_list' %}">Proveedores</a>
+      </div>
+    </details>
+  {% endif %}
+  <a href="{% url 'inventario:producto_create' %}" class="btn btn-primario">Nuevo producto</a>
+{% endblock %}
+
+{% block acciones_derecha %}
+  {% if sucursales.count > 1 %}
+    <form method="get" class="o-filtros">
+      <select name="sucursal" onchange="this.form.submit()">
+        {% for s in sucursales %}
+          <option value="{{ s.pk }}" {% if s == sucursal %}selected{% endif %}>{{ s.nombre }}</option>
+        {% endfor %}
+      </select>
+      <noscript><button type="submit" class="btn">Ver</button></noscript>
+    </form>
+  {% elif sucursal %}
+    <span class="pill pill-gris">{{ sucursal }}</span>
   {% endif %}
 {% endblock %}
 
@@ -19,20 +42,37 @@
   <table class="o-lista">
     <thead>
       <tr>
-        <th>Codigo</th><th>Nombre</th><th>Categoria</th><th>Marca</th>
-        <th class="num">Compra</th><th class="num">Venta</th><th class="acciones"></th>
+        <th>Codigo</th><th>Nombre</th><th>Categoria</th>
+        <th class="num">Compra</th><th class="num">Venta</th>
+        <th class="num">Stock</th><th class="acciones"></th>
       </tr>
     </thead>
     <tbody>
       {% for p in productos %}
         <tr>
           <td><span class="numero-socio">{{ p.codigo }}</span></td>
-          <td><strong>{{ p.nombre }}</strong></td>
+          <td>
+            <strong>{{ p.nombre }}</strong>
+            {% if p.marca %}<span class="texto-tenue">{{ p.marca }}</span>{% endif %}
+          </td>
           <td class="texto-tenue">{{ p.categoria.nombre }}</td>
-          <td class="texto-tenue">{{ p.marca|default:'-' }}</td>
-          <td class="num">{{ p.precio_compra }}</td>
+          <td class="num texto-tenue">{{ p.precio_compra }}</td>
           <td class="num">{{ p.precio_venta }}</td>
+          <td class="num">
+            {% if p.inventario and not p.inventario.bajo_minimo %}
+              <strong>{{ p.inventario.stock }}</strong>
+            {% else %}
+              {# Sin fila de inventario todavia son cero, que tambien urge. #}
+              <span class="pill pill-alerta">{{ p.inventario.stock|default:0 }}</span>
+            {% endif %}
+          </td>
           <td class="acciones">
+            <a href="{% url 'inventario:producto_entrada' p.pk %}"
+               class="btn btn-mini">Entrada</a>
+            {% if p.inventario %}
+              <a href="{% url 'inventario:inventario_update' p.inventario.pk %}"
+                 class="btn-enlace">Ajustar</a>
+            {% endif %}
             <a href="{% url 'inventario:producto_update' p.pk %}" class="btn-enlace">Editar</a>
             <a href="{% url 'inventario:producto_delete' p.pk %}" class="btn-enlace">Baja</a>
           </td>

@@ -21,6 +21,11 @@ urlpatterns = [
     path('productos/', views.ProductoListView.as_view(), name='producto_list'),
     path('productos/nuevo/', views.ProductoCreateView.as_view(), name='producto_create'),
     path(
+        'productos/<int:pk>/entrada/',
+        views.EntradaProductoView.as_view(),
+        name='producto_entrada',
+    ),
+    path(
         'productos/<int:pk>/editar/',
         views.ProductoUpdateView.as_view(),
         name='producto_update',
@@ -31,7 +36,6 @@ urlpatterns = [
         name='producto_delete',
     ),
 
-    path('stock/', views.InventarioListView.as_view(), name='inventario_list'),
     path(
         'stock/<int:pk>/ajustar/',
         views.InventarioUpdateView.as_view(),

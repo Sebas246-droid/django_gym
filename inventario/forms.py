@@ -218,6 +218,49 @@ class ProductoAltaForm(ProductoForm):
     EXISTENCIAS = ('cantidad', 'sucursal', 'proveedor')
 
 
+class EntradaForm(SinSufijoMixin, forms.Form):
+    """
+    Mercancia que entra de un producto que ya existe. Es lo que mas se repite,
+    asi que pide lo minimo: cuantas y a que costo.
+    """
+
+    cantidad = forms.IntegerField(min_value=1, label='Cuantas entran')
+    precio = forms.DecimalField(
+        max_digits=10,
+        decimal_places=2,
+        required=False,
+        min_value=0,
+        label='Costo por pieza (opcional)',
+        help_text='Vacio toma el costo que ya tiene el producto.',
+    )
+    sucursal = forms.ModelChoiceField(
+        queryset=Sucursal.objects.none(), label='Sucursal que la recibe'
+    )
+    proveedor = forms.ModelChoiceField(
+        queryset=Proveedor.objects.none(),
+        required=False,
+        label='Proveedor (opcional)',
+        empty_label='Sin proveedor',
+    )
+
+    def __init__(self, *args, gym=None, producto=None, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.gym = gym
+        self.producto = producto
+        sucursales = Sucursal.objects.filter(gym=gym, activo=True)
+        self.fields['sucursal'].queryset = sucursales
+        self.fields['proveedor'].queryset = Proveedor.objects.filter(
+            gym=gym, activo=True
+        )
+        self.fields['precio'].widget.attrs['placeholder'] = (
+            producto.precio_compra if producto else ''
+        )
+        # Con una sola sucursal no tiene sentido preguntar: se elige sola.
+        if sucursales.count() == 1:
+            self.fields['sucursal'].initial = sucursales.first()
+            self.fields['sucursal'].widget = forms.HiddenInput()
+
+
 class ProveedorForm(GymModelForm):
     class Meta:
         model = Proveedor
