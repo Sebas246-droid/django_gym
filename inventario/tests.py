@@ -154,3 +154,86 @@ class PantallaDeInventarioTest(BaseInventarioTest):
 
         # Una sucursal de otro gym no se elige: se cae a la propia.
         self.assertEqual(respuesta.context['sucursal'], self.sucursal)
+
+
+class CostoDelProductoTest(BaseInventarioTest):
+    """
+    Al mismo producto se le compra a varios proveedores y a distinto costo. El
+    costo del producto tiene que seguir al de la ultima compra: es el que
+    decide el margen y el que se propone en la siguiente entrada.
+    """
+
+    def entrar(self, precio=None, proveedor=None):
+        datos = {'cantidad': '10', 'sucursal': self.sucursal.pk}
+        if precio is not None:
+            datos['precio'] = precio
+        if proveedor is not None:
+            datos['proveedor'] = proveedor.pk
+        return self.client.post(
+            reverse('inventario:producto_entrada', args=[self.producto.pk]), datos
+        )
+
+    def test_una_entrada_mas_cara_actualiza_el_costo(self):
+        self.entrar(precio='350')
+
+        self.producto.refresh_from_db()
+        self.assertEqual(self.producto.precio_compra, 350)
+
+    def test_sin_costo_no_lo_mueve(self):
+        self.entrar()
+
+        self.producto.refresh_from_db()
+        self.assertEqual(self.producto.precio_compra, 300)
+
+    def test_dos_proveedores_distintos_quedan_por_separado(self):
+        uno = Proveedor.objects.create(gym=self.gym, nombre='Nutrimex')
+        otro = Proveedor.objects.create(gym=self.gym, nombre='Suplenorte')
+
+        self.entrar(precio='300', proveedor=uno)
+        self.entrar(precio='340', proveedor=otro)
+
+        compras = Compra.objects.filter(gym=self.gym).order_by('pk')
+        self.assertEqual(
+            [(c.proveedor.nombre, c.detalles.get().precio) for c in compras],
+            [('Nutrimex', 300), ('Suplenorte', 340)],
+        )
+        self.producto.refresh_from_db()
+        self.assertEqual(self.producto.precio_compra, 340)
+        self.assertEqual(self.producto.stock_en(self.sucursal), 20)
+
+    def test_la_pantalla_muestra_a_quien_se_le_compro(self):
+        proveedor = Proveedor.objects.create(gym=self.gym, nombre='Nutrimex')
+        self.entrar(precio='320', proveedor=proveedor)
+
+        respuesta = self.client.get(
+            reverse('inventario:producto_entrada', args=[self.producto.pk])
+        )
+
+        self.assertContains(respuesta, 'Nutrimex')
+        self.assertContains(respuesta, '320')
+
+    def test_el_costo_nuevo_se_propone_la_siguiente_vez(self):
+        self.entrar(precio='350')
+
+        respuesta = self.client.get(
+            reverse('inventario:producto_entrada', args=[self.producto.pk])
+        )
+
+        self.assertContains(respuesta, 'placeholder="350')
+
+
+class CodigoRepetidoTest(BaseInventarioTest):
+    def test_dice_a_donde_ir_cuando_el_producto_ya_existe(self):
+        """Casi siempre no es un error de captura: llego mas de lo mismo."""
+        respuesta = self.client.post(reverse('inventario:producto_create'), {
+            'codigo': self.producto.codigo, 'nombre': 'Otra proteina',
+            'categoria': str(self.categoria.pk),
+            'precio_compra': '300', 'precio_venta': '500', 'cantidad': '0',
+        })
+
+        cuerpo = respuesta.content.decode()
+        self.assertIn('Ya tienes', cuerpo)
+        self.assertIn(
+            reverse('inventario:producto_entrada', args=[self.producto.pk]), cuerpo
+        )
+        self.assertEqual(Producto.objects.filter(gym=self.gym).count(), 1)

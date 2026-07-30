@@ -1,0 +1,63 @@
+{% extends 'base.html' %}
+
+{% comment %}
+Entrada de mercancia de un producto que ya existe. Al lado se listan las
+compras anteriores: al mismo producto se le compra a varios proveedores y a
+distinto costo, y ver a como salio la ultima vez es lo que hace falta para
+decidir el costo de esta.
+{% endcomment %}
+
+{% block title %}{{ titulo }} - GymPilot{% endblock %}
+{% block migas %}
+  / <a href="{% url 'inventario:producto_list' %}">Inventario</a> / <span>Entrada</span>
+{% endblock %}
+{% block encabezado %}{{ titulo }}{% endblock %}
+
+{% block acciones_derecha %}
+  <span class="pill pill-gris">{{ producto.codigo }}</span>
+{% endblock %}
+
+{% block content %}
+<div class="rejilla-detalle">
+
+  <div class="o-hoja">
+    <form method="post" class="o-form">
+      {% csrf_token %}
+      {{ form.as_p }}
+      <div class="o-form-acciones">
+        <button type="submit" class="btn btn-primario">Registrar entrada</button>
+        <a href="{% url 'inventario:producto_list' %}" class="btn">Cancelar</a>
+      </div>
+    </form>
+  </div>
+
+  <div class="o-hoja">
+    <h2>Compras anteriores</h2>
+    <p class="texto-tenue">
+      Costo actual del producto: <b>{{ producto.precio_compra }}</b>. Se
+      actualiza al costo de esta entrada.
+    </p>
+    <table class="o-lista">
+      <thead>
+        <tr>
+          <th>Fecha</th><th>Proveedor</th>
+          <th class="num">Cant.</th><th class="num">Costo</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for d in compras_previas %}
+          <tr>
+            <td class="texto-tenue">{{ d.compra.fecha|date:'d/m/Y' }}</td>
+            <td>{{ d.compra.proveedor|default:'Sin proveedor' }}</td>
+            <td class="num">{{ d.cantidad }}</td>
+            <td class="num"><strong>{{ d.precio }}</strong></td>
+          </tr>
+        {% empty %}
+          <tr><td colspan="4" class="vacio">Es la primera compra de este producto.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+
+</div>
+{% endblock %}

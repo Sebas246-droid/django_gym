@@ -1,4 +1,6 @@
 from django import forms
+from django.urls import reverse
+from django.utils.html import format_html
 
 from core.forms import GymModelForm, SinSufijoMixin
 from core.models import Sucursal
@@ -84,8 +86,21 @@ class ProductoForm(GymModelForm):
         otros = Producto.objects.filter(gym=self.gym, codigo=codigo)
         if self.instance.pk:
             otros = otros.exclude(pk=self.instance.pk)
-        if otros.exists():
-            self.add_error('codigo', 'Ya existe un producto con ese codigo.')
+
+        repetido = otros.first()
+        if repetido is None:
+            return
+        # Casi siempre no es un error de captura: llego mas de algo que ya se
+        # vende. Frenar sin decir a donde ir deja a la persona atorada.
+        self.add_error(
+            'codigo',
+            format_html(
+                'Ya tienes <b>{}</b> con ese codigo. Si te llego mas, '
+                'registralo como <a href="{}">entrada de mercancia</a>.',
+                repetido.nombre,
+                reverse('inventario:producto_entrada', args=[repetido.pk]),
+            ),
+        )
 
     def clean(self):
         datos = super().clean()

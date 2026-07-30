@@ -124,7 +124,7 @@ class EntradaProductoView(GymRequiredMixin, FormView):
     """
 
     form_class = EntradaForm
-    template_name = 'core/form.html'
+    template_name = 'inventario/entrada_form.html'
     success_url = reverse_lazy('inventario:producto_list')
 
     @property
@@ -142,24 +142,45 @@ class EntradaProductoView(GymRequiredMixin, FormView):
 
     def get_context_data(self, **kwargs):
         ctx = super().get_context_data(**kwargs)
-        ctx['titulo'] = f'Entrada de {self.producto.nombre}'
+        producto = self.producto
+        ctx['titulo'] = f'Entrada de {producto.nombre}'
+        ctx['producto'] = producto
+        # A quien y a cuanto se le ha comprado antes: sirve para decidir el
+        # costo de esta entrada sin salirse de la pantalla.
+        ctx['compras_previas'] = (
+            CompraDetalle.objects.filter(
+                producto=producto, compra__estado=Compra.CONFIRMADA
+            )
+            .select_related('compra', 'compra__proveedor')
+            .order_by('-compra__fecha')[:5]
+        )
         return ctx
 
     def form_valid(self, form):
+        # Una sola instancia: registrar_entrada la modifica si cambia el costo.
+        producto = self.producto
+        costo_anterior = producto.precio_compra
+        cantidad = form.cleaned_data['cantidad']
+
         compra = Compra.registrar_entrada(
-            producto=self.producto,
+            producto=producto,
             sucursal=form.cleaned_data['sucursal'],
-            cantidad=form.cleaned_data['cantidad'],
+            cantidad=cantidad,
             precio=form.cleaned_data.get('precio'),
             proveedor=form.cleaned_data.get('proveedor'),
             usuario=self.request.user,
         )
-        messages.success(
-            self.request,
-            f'Entraron {form.cleaned_data["cantidad"]} de '
-            f'{self.producto.nombre}. Quedan '
-            f'{self.producto.stock_en(compra.sucursal)} en {compra.sucursal}.',
+
+        aviso = (
+            f'Entraron {cantidad} de {producto.nombre}. Quedan '
+            f'{producto.stock_en(compra.sucursal)} en {compra.sucursal}.'
         )
+        if producto.precio_compra != costo_anterior:
+            aviso += (
+                f' El costo pasa de {costo_anterior} a {producto.precio_compra}, '
+                'que es con el que se calcula la ganancia.'
+            )
+        messages.success(self.request, aviso)
         return super().form_valid(form)
 
 

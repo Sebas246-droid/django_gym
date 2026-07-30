@@ -154,6 +154,7 @@ class Compra(GymModel):
         grande, pero obligar a recorrerla para un producto hacia que nadie la
         usara y el stock se corrigiera a mano, sin dejar rastro del costo.
         """
+        costo = producto.precio_compra if precio is None else precio
         compra = cls.objects.create(
             gym=producto.gym,
             sucursal=sucursal,
@@ -161,12 +162,17 @@ class Compra(GymModel):
             usuario=usuario,
         )
         CompraDetalle.objects.create(
-            compra=compra,
-            producto=producto,
-            cantidad=cantidad,
-            precio=producto.precio_compra if precio is None else precio,
+            compra=compra, producto=producto, cantidad=cantidad, precio=costo
         )
         compra.confirmar()
+
+        # El costo del producto sigue al de la ultima compra: es el que decide
+        # el margen y el que se propone la proxima vez. Dejarlo viejo hace
+        # creer que se gana cuando ya no.
+        if costo != producto.precio_compra:
+            producto.precio_compra = costo
+            producto.save(update_fields=['precio_compra', 'updated_at'])
+
         return compra
 
 
