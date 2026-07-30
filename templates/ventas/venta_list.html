@@ -22,7 +22,7 @@
     <tbody>
       {% for v in ventas %}
         <tr>
-          <td><a href="{% url 'ventas:venta_detail' v.pk %}"><strong>{{ v.pk }}</strong></a></td>
+          <td><a href="{% url 'ventas:venta_detail' v.pk %}" class="enlace-detalle">{{ v.pk }}</a></td>
           <td class="texto-tenue">{{ v.fecha|date:'d/m/Y H:i' }}</td>
           <td>{{ v.cliente|default:'Mostrador' }}</td>
           <td class="texto-tenue">{{ v.sucursal }}</td>

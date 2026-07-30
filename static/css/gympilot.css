@@ -258,6 +258,9 @@ button { font-family: inherit; }
 }
 .btn-enlace:hover { background: #F3F3F7; color: var(--tinta); }
 
+/* Para las acciones dentro de una fila, donde un boton normal pesa de mas. */
+.btn-mini { padding: 5px 11px; font-size: 12.5px; }
+
 .btn-grande { padding: 11px 20px; font-size: 15px; border-radius: var(--r); }
 
 /* --- Tarjetas ------------------------------------------------------------ */
@@ -714,7 +717,16 @@ table.o-lista td {
 }
 table.o-lista tbody tr:last-child td { border-bottom: 0; }
 table.o-lista tbody tr { transition: background .1s ease; }
-table.o-lista tbody tr:hover { background: #FCFCFE; }
+table.o-lista tbody tr:hover { background: #F6F6FA; }
+
+/*
+  Enlace al detalle desde una tabla. Los enlaces del sistema heredan color y no
+  llevan subrayado, asi que sin esto el nombre se lee como texto suelto y nadie
+  descubre que se puede entrar a la ficha.
+*/
+.enlace-detalle { color: var(--tinta); font-weight: 570; }
+.enlace-detalle:hover { color: var(--acento); text-decoration: underline; }
+table.o-lista tbody tr:hover .enlace-detalle { color: var(--acento); }
 table.o-lista .num { text-align: right; font-variant-numeric: tabular-nums; }
 table.o-lista .acciones { text-align: right; white-space: nowrap; }
 table.o-lista .vacio {

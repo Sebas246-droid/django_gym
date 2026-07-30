@@ -50,7 +50,12 @@
         <a href="{% url 'clientes:cliente_list' %}" class="{% if menu == 'clientes' %}activo{% endif %}">
           {% include 'core/_icono.html' with nombre='clientes' %} Clientes
         </a>
-        <a href="{% url 'clientes:membresia_list' %}" class="{% if menu == 'membresias' %}activo{% endif %}">
+        {% comment %}
+        Lleva a las ventas, no al catalogo: vender es lo de todos los dias y el
+        catalogo se configura una vez. Se llega a el desde ahi.
+        {% endcomment %}
+        <a href="{% url 'clientes:clientemembresia_list' %}"
+           class="{% if menu == 'membresias' %}activo{% endif %}">
           {% include 'core/_icono.html' with nombre='membresias' %} Membresias
         </a>
         <a href="{% url 'ventas:pos' %}" class="{% if menu == 'pos' %}activo{% endif %}">

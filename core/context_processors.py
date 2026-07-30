@@ -40,7 +40,8 @@ def _menu_activo(request):
     ruta = coincidencia.view_name
     if ruta in MENU_POR_VISTA:
         return MENU_POR_VISTA[ruta]
-    if coincidencia.url_name and coincidencia.url_name.startswith('membresia'):
+    # Cubre tanto el catalogo (membresia_*) como las ventas (clientemembresia_*).
+    if coincidencia.url_name and 'membresia' in coincidencia.url_name:
         return 'membresias'
     return MENU_POR_APP.get(coincidencia.app_name, '')
 

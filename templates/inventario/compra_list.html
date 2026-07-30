@@ -21,7 +21,7 @@
     <tbody>
       {% for c in compras %}
         <tr>
-          <td><a href="{% url 'inventario:compra_detail' c.pk %}"><strong>{{ c.pk }}</strong></a></td>
+          <td><a href="{% url 'inventario:compra_detail' c.pk %}" class="enlace-detalle">{{ c.pk }}</a></td>
           <td class="texto-tenue">{{ c.fecha|date:'d/m/Y H:i' }}</td>
           <td>{{ c.proveedor|default:'Sin proveedor' }}</td>
           <td class="texto-tenue">{{ c.sucursal }}</td>

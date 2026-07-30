@@ -25,9 +25,8 @@
         <tr>
           <td class="texto-tenue">{{ cm.fecha_pago|date:'d/m/Y H:i' }}</td>
           <td>
-            <a href="{% url 'clientes:cliente_detail' cm.cliente.pk %}">
-              <strong>{{ cm.cliente }}</strong>
-            </a>
+            <a href="{% url 'clientes:cliente_detail' cm.cliente.pk %}"
+               class="enlace-detalle">{{ cm.cliente }}</a>
           </td>
           <td>{{ cm.membresia.nombre }}</td>
           <td class="texto-tenue">{{ cm.inicio|date:'d/m/Y' }} al {{ cm.fin|date:'d/m/Y' }}</td>

@@ -23,7 +23,8 @@
           <td class="texto-tenue">{{ a.fecha_hora|date:'d/m/Y H:i' }}</td>
           <td><span class="numero-socio">{{ a.cliente.numero_usuario }}</span></td>
           <td>
-            <a href="{% url 'clientes:cliente_detail' a.cliente.pk %}">{{ a.cliente }}</a>
+            <a href="{% url 'clientes:cliente_detail' a.cliente.pk %}"
+               class="enlace-detalle">{{ a.cliente }}</a>
           </td>
           <td>
             {% if a.tipo == 'entrada' %}

@@ -5,6 +5,7 @@
 {% block encabezado %}Clientes{% endblock %}
 
 {% block acciones %}
+  <a href="{% url 'clientes:clientemembresia_create' %}" class="btn">Vender membresia</a>
   <a href="{% url 'clientes:cliente_create' %}" class="btn btn-primario">Nuevo cliente</a>
 {% endblock %}
 
@@ -30,8 +31,8 @@
         <tr>
           <td><span class="numero-socio">{{ cliente.numero_usuario }}</span></td>
           <td>
-            <a href="{% url 'clientes:cliente_detail' cliente.pk %}">
-              <strong>{{ cliente.nombre }}</strong>
+            <a href="{% url 'clientes:cliente_detail' cliente.pk %}" class="enlace-detalle">
+              {{ cliente.nombre }}
             </a>
           </td>
           <td>{{ cliente.telefono|default:'-' }}</td>
@@ -45,10 +46,14 @@
               {% endif %}
             {% endwith %}
           </td>
+          {% comment %}
+          Vender es la accion que deja dinero: va como boton, no como un enlace
+          mas entre otros dos.
+          {% endcomment %}
           <td class="acciones">
-            <a href="{% url 'clientes:cliente_update' cliente.pk %}" class="btn-enlace">Editar</a>
             <a href="{% url 'clientes:clientemembresia_create' %}?cliente={{ cliente.pk }}"
-               class="btn-enlace">Vender</a>
+               class="btn btn-mini">{% if cliente.esta_al_corriente %}Renovar{% else %}Vender{% endif %}</a>
+            <a href="{% url 'clientes:cliente_update' cliente.pk %}" class="btn-enlace">Editar</a>
             <a href="{% url 'clientes:cliente_delete' cliente.pk %}" class="btn-enlace">Baja</a>
           </td>
         </tr>
