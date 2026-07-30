@@ -5,17 +5,16 @@
 {% block encabezado %}Inventario{% endblock %}
 
 {% comment %}
-Arriba solo lo de todos los dias. Categorias y proveedores se configuran una
-vez y pesaban igual que dar de alta un producto, asi que bajan a un menu.
+Arriba solo lo de todos los dias. Las categorias se configuran una vez y
+pesaban igual que dar de alta un producto, asi que bajan a un menu.
 {% endcomment %}
 {% block acciones %}
-  <a href="{% url 'inventario:compra_list' %}" class="btn">Compras</a>
+  <a href="{% url 'inventario:movimiento_list' %}" class="btn">Movimientos</a>
   {% if es_admin %}
     <details class="o-menu">
       <summary class="btn">Mas</summary>
       <div class="o-menu-lista">
         <a href="{% url 'inventario:categoria_list' %}">Categorias</a>
-        <a href="{% url 'inventario:proveedor_list' %}">Proveedores</a>
       </div>
     </details>
   {% endif %}
@@ -67,8 +66,8 @@ vez y pesaban igual que dar de alta un producto, asi que bajan a un menu.
             {% endif %}
           </td>
           <td class="acciones">
-            <a href="{% url 'inventario:producto_entrada' p.pk %}"
-               class="btn btn-mini">Entrada</a>
+            <a href="{% url 'inventario:movimiento_create' %}?producto={{ p.pk }}"
+               class="btn btn-mini">Movimiento</a>
             {% if p.inventario %}
               <a href="{% url 'inventario:inventario_update' p.inventario.pk %}"
                  class="btn-enlace">Ajustar</a>

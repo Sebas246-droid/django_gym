@@ -1,0 +1,81 @@
+{% extends 'base.html' %}
+
+{% comment %}
+Al elegir el producto se rellena el importe con lo que ya tiene: su costo si
+entra, su precio si sale. Se puede pisar cuando esta compra costo distinto.
+{% endcomment %}
+
+{% block title %}{{ titulo }} - GymPilot{% endblock %}
+{% block migas %}
+  / <a href="{% url 'inventario:movimiento_list' %}">Movimientos</a> / <span>Nuevo</span>
+{% endblock %}
+{% block encabezado %}{{ titulo }}{% endblock %}
+
+{% block content %}
+<div class="o-hoja o-hoja-angosta">
+  <form method="post" class="o-form" id="form-movimiento">
+    {% csrf_token %}
+    {% if form.non_field_errors %}
+      <div class="o-mensaje error">{{ form.non_field_errors }}</div>
+    {% endif %}
+    {% for campo in form %}{% include 'core/_campo.html' %}{% endfor %}
+    <div class="o-form-acciones">
+      <button type="submit" class="btn btn-primario">Registrar</button>
+      <a href="{% url 'inventario:movimiento_list' %}" class="btn">Cancelar</a>
+    </div>
+  </form>
+</div>
+
+<script>
+(function () {
+  var producto = document.getElementById('id_producto');
+  var tipo = document.getElementById('id_tipo');
+  var motivo = document.getElementById('id_motivo');
+  var precio = document.getElementById('id_precio');
+
+  // Cada opcion del desplegable trae el costo y el precio del producto.
+  function prellenarImporte() {
+    var elegido = producto.selectedOptions[0];
+    if (!elegido || !elegido.dataset.compra) { return; }
+    var entra = tipo.value === 'entrada';
+    precio.placeholder = entra ? elegido.dataset.compra : elegido.dataset.venta;
+    // Solo se rellena si esta vacio: lo que ya escribio la persona manda.
+    if (!precio.value) { precio.value = precio.placeholder; }
+  }
+
+  // Los motivos no aplican a los dos lados: una merma no es una entrada.
+  var todos = Array.prototype.map.call(motivo.options, function (o) {
+    return { valor: o.value, texto: o.text };
+  });
+  var porTipo = {
+    entrada: {{ form.MOTIVOS_ENTRADA_JSON|safe }},
+    salida: {{ form.MOTIVOS_SALIDA_JSON|safe }}
+  };
+
+  function filtrarMotivos() {
+    var permitidos = porTipo[tipo.value] || [];
+    var elegido = motivo.value;
+    motivo.innerHTML = '';
+    todos.forEach(function (m) {
+      if (permitidos.indexOf(m.valor) === -1) { return; }
+      var opcion = new Option(m.texto, m.valor);
+      opcion.selected = m.valor === elegido;
+      motivo.add(opcion);
+    });
+  }
+
+  producto.addEventListener('change', function () {
+    precio.value = '';
+    prellenarImporte();
+  });
+  tipo.addEventListener('change', function () {
+    filtrarMotivos();
+    precio.value = '';
+    prellenarImporte();
+  });
+
+  filtrarMotivos();
+  prellenarImporte();
+})();
+</script>
+{% endblock %}

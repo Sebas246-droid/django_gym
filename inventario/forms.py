@@ -1,3 +1,5 @@
+import json
+
 from django import forms
 from django.urls import reverse
 from django.utils.html import format_html
@@ -6,11 +8,9 @@ from core.forms import GymModelForm, SinSufijoMixin
 from core.models import Sucursal
 from inventario.models import (
     CategoriaProducto,
-    Compra,
-    CompraDetalle,
     InventarioSucursal,
+    Movimiento,
     Producto,
-    Proveedor,
 )
 
 
@@ -96,9 +96,10 @@ class ProductoForm(GymModelForm):
             'codigo',
             format_html(
                 'Ya tienes <b>{}</b> con ese codigo. Si te llego mas, '
-                'registralo como <a href="{}">entrada de mercancia</a>.',
+                'registralo como <a href="{}?producto={}">entrada</a>.',
                 repetido.nombre,
-                reverse('inventario:producto_entrada', args=[repetido.pk]),
+                reverse('inventario:movimiento_create'),
+                repetido.pk,
             ),
         )
 
@@ -176,9 +177,9 @@ class ProductoForm(GymModelForm):
 class ProductoAltaForm(ProductoForm):
     """
     Alta de producto con sus existencias iniciales. Dar de alta algo que ya
-    tienes en la bodega es, en los hechos, una compra: por eso la cantidad se
-    pide aqui y la vista levanta la compra correspondiente, en vez de obligar a
-    recorrer producto -> compra -> linea -> confirmar.
+    tienes en la bodega es, en los hechos, una entrada: por eso la cantidad se
+    pide aqui y la vista deja su movimiento, en vez de mandar a registrarlo
+    despues en otra pantalla.
     """
 
     cantidad = forms.IntegerField(
@@ -193,21 +194,11 @@ class ProductoAltaForm(ProductoForm):
         required=False,
         label='Sucursal que las recibe',
     )
-    proveedor = forms.ModelChoiceField(
-        queryset=Proveedor.objects.none(),
-        required=False,
-        label='Proveedor',
-        empty_label='Sin proveedor',
-        help_text='Opcional: solo para dejar constancia de a quien se le compro.',
-    )
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         sucursales = Sucursal.objects.filter(gym=self.gym, activo=True)
         self.fields['sucursal'].queryset = sucursales
-        self.fields['proveedor'].queryset = Proveedor.objects.filter(
-            gym=self.gym, activo=True
-        )
         # Con una sola sucursal no tiene sentido preguntar: se elige sola.
         if sucursales.count() == 1:
             self.fields['sucursal'].initial = sucursales.first()
@@ -230,82 +221,7 @@ class ProductoAltaForm(ProductoForm):
         self.add_error('sucursal', 'Indica a que sucursal entran las piezas.')
         return datos
 
-    EXISTENCIAS = ('cantidad', 'sucursal', 'proveedor')
-
-
-class EntradaForm(SinSufijoMixin, forms.Form):
-    """
-    Mercancia que entra de un producto que ya existe. Es lo que mas se repite,
-    asi que pide lo minimo: cuantas y a que costo.
-    """
-
-    cantidad = forms.IntegerField(min_value=1, label='Cuantas entran')
-    precio = forms.DecimalField(
-        max_digits=10,
-        decimal_places=2,
-        required=False,
-        min_value=0,
-        label='Costo por pieza (opcional)',
-        help_text='Vacio toma el costo que ya tiene el producto.',
-    )
-    sucursal = forms.ModelChoiceField(
-        queryset=Sucursal.objects.none(), label='Sucursal que la recibe'
-    )
-    proveedor = forms.ModelChoiceField(
-        queryset=Proveedor.objects.none(),
-        required=False,
-        label='Proveedor (opcional)',
-        empty_label='Sin proveedor',
-    )
-
-    def __init__(self, *args, gym=None, producto=None, **kwargs):
-        super().__init__(*args, **kwargs)
-        self.gym = gym
-        self.producto = producto
-        sucursales = Sucursal.objects.filter(gym=gym, activo=True)
-        self.fields['sucursal'].queryset = sucursales
-        self.fields['proveedor'].queryset = Proveedor.objects.filter(
-            gym=gym, activo=True
-        )
-        self.fields['precio'].widget.attrs['placeholder'] = (
-            producto.precio_compra if producto else ''
-        )
-        # Con una sola sucursal no tiene sentido preguntar: se elige sola.
-        if sucursales.count() == 1:
-            self.fields['sucursal'].initial = sucursales.first()
-            self.fields['sucursal'].widget = forms.HiddenInput()
-
-
-class ProveedorForm(GymModelForm):
-    class Meta:
-        model = Proveedor
-        fields = ['nombre', 'telefono', 'correo']
-
-
-class CompraForm(GymModelForm):
-    class Meta:
-        model = Compra
-        fields = ['proveedor', 'sucursal']
-
-
-class CompraDetalleForm(SinSufijoMixin, forms.ModelForm):
-    class Meta:
-        model = CompraDetalle
-        fields = ['producto', 'cantidad', 'precio']
-
-    def __init__(self, *args, gym=None, **kwargs):
-        super().__init__(*args, **kwargs)
-        self.fields['producto'].queryset = Producto.objects.filter(
-            gym=gym, activo=True
-        )
-        self.fields['precio'].required = False
-
-    def clean(self):
-        datos = super().clean()
-        producto = datos.get('producto')
-        if producto and not datos.get('precio'):
-            datos['precio'] = producto.precio_compra
-        return datos
+    EXISTENCIAS = ('cantidad', 'sucursal')
 
 
 class InventarioSucursalForm(SinSufijoMixin, forms.ModelForm):
@@ -314,3 +230,128 @@ class InventarioSucursalForm(SinSufijoMixin, forms.ModelForm):
     class Meta:
         model = InventarioSucursal
         fields = ['stock', 'stock_minimo']
+
+
+class SelectorDeProducto(forms.Select):
+    """
+    Desplegable que carga en cada opcion el costo y el precio del producto,
+    para que la pantalla pueda prellenar el importe al elegirlo.
+    """
+
+    def __init__(self, productos=(), attrs=None):
+        self.precios = {
+            str(p.pk): (p.precio_compra, p.precio_venta, p.codigo) for p in productos
+        }
+        super().__init__(attrs)
+
+    def create_option(self, name, value, *args, **kwargs):
+        opcion = super().create_option(name, value, *args, **kwargs)
+        datos = self.precios.get(str(value))
+        if datos:
+            compra, venta, codigo = datos
+            opcion['attrs'].update({
+                'data-compra': compra,
+                'data-venta': venta,
+                'data-codigo': codigo,
+            })
+        return opcion
+
+
+class MovimientoForm(SinSufijoMixin, forms.Form):
+    """
+    Lo que entra o sale a mano. La venta no se registra aqui: la anota el punto
+    de venta al cobrar, y dejarla a mano abriria la puerta a contarla dos veces.
+    """
+
+    MOTIVOS_A_MANO = [
+        m for m in Movimiento.MOTIVOS if m[0] != Movimiento.VENTA
+    ]
+
+    producto = forms.ModelChoiceField(
+        queryset=Producto.objects.none(),
+        label='Producto',
+        empty_label='Elige el producto',
+    )
+    tipo = forms.ChoiceField(choices=Movimiento.TIPOS, label='Entra o sale')
+    motivo = forms.ChoiceField(choices=MOTIVOS_A_MANO, label='Motivo')
+    cantidad = forms.IntegerField(min_value=1, label='Cuantas piezas')
+    precio = forms.DecimalField(
+        max_digits=10,
+        decimal_places=2,
+        required=False,
+        min_value=0,
+        label='Importe por pieza',
+        help_text='Vacio toma el del producto: su costo si entra, su precio si sale.',
+    )
+    sucursal = forms.ModelChoiceField(
+        queryset=Sucursal.objects.none(), label='Sucursal'
+    )
+    nota = forms.CharField(max_length=200, required=False, label='Nota (opcional)')
+
+    def __init__(self, *args, gym=None, inicial_producto=None, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.gym = gym
+
+        productos = Producto.objects.filter(gym=gym, activo=True).order_by('nombre')
+        self.fields['producto'].queryset = productos
+        self.fields['producto'].widget = SelectorDeProducto(productos=productos)
+        self.fields['producto'].widget.choices = self.fields['producto'].choices
+        if inicial_producto and not self.is_bound:
+            self.fields['producto'].initial = inicial_producto
+
+        sucursales = Sucursal.objects.filter(gym=gym, activo=True)
+        self.fields['sucursal'].queryset = sucursales
+        if sucursales.count() == 1:
+            self.fields['sucursal'].initial = sucursales.first()
+            self.fields['sucursal'].widget = forms.HiddenInput()
+
+    # Los lee la plantilla para esconder los motivos que no aplican al tipo
+    # elegido: una merma no es una entrada.
+    @property
+    def MOTIVOS_ENTRADA_JSON(self):
+        return json.dumps(Movimiento.MOTIVOS_ENTRADA)
+
+    @property
+    def MOTIVOS_SALIDA_JSON(self):
+        return json.dumps(
+            [m for m in Movimiento.MOTIVOS_SALIDA if m != Movimiento.VENTA]
+        )
+
+    def clean(self):
+        datos = super().clean()
+        tipo, motivo = datos.get('tipo'), datos.get('motivo')
+        if not tipo or not motivo:
+            return datos
+
+        permitidos = (
+            Movimiento.MOTIVOS_ENTRADA
+            if tipo == Movimiento.ENTRADA
+            else Movimiento.MOTIVOS_SALIDA
+        )
+        if motivo not in permitidos:
+            etiquetas = dict(Movimiento.MOTIVOS)
+            self.add_error(
+                'motivo',
+                f'{etiquetas[motivo]} no aplica a una '
+                f'{dict(Movimiento.TIPOS)[tipo].lower()}.',
+            )
+            return datos
+
+        self._verificar_existencias(datos)
+        return datos
+
+    def _verificar_existencias(self, datos):
+        """No se puede sacar mas de lo que hay: el stock quedaria en negativo."""
+        if datos.get('tipo') != Movimiento.SALIDA:
+            return
+        producto, sucursal = datos.get('producto'), datos.get('sucursal')
+        cantidad = datos.get('cantidad')
+        if not producto or not sucursal or not cantidad:
+            return
+
+        hay = producto.stock_en(sucursal)
+        if cantidad > hay:
+            self.add_error(
+                'cantidad',
+                f'Solo hay {hay} de {producto.nombre} en {sucursal}.',
+            )

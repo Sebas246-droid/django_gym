@@ -2,11 +2,9 @@ from django.contrib import admin
 
 from inventario.models import (
     CategoriaProducto,
-    Compra,
-    CompraDetalle,
     InventarioSucursal,
+    Movimiento,
     Producto,
-    Proveedor,
 )
 
 
@@ -30,19 +28,10 @@ class InventarioSucursalAdmin(admin.ModelAdmin):
     list_filter = ['sucursal']
 
 
-@admin.register(Proveedor)
-class ProveedorAdmin(admin.ModelAdmin):
-    list_display = ['nombre', 'gym', 'telefono', 'activo']
-    list_filter = ['gym', 'activo']
-
-
-class CompraDetalleInline(admin.TabularInline):
-    model = CompraDetalle
-    extra = 0
-
-
-@admin.register(Compra)
-class CompraAdmin(admin.ModelAdmin):
-    list_display = ['id', 'gym', 'proveedor', 'sucursal', 'fecha', 'total', 'estado']
-    list_filter = ['gym', 'sucursal', 'estado']
-    inlines = [CompraDetalleInline]
+@admin.register(Movimiento)
+class MovimientoAdmin(admin.ModelAdmin):
+    list_display = ['fecha', 'producto', 'sucursal', 'tipo', 'motivo',
+                    'cantidad', 'precio', 'usuario']
+    list_filter = ['gym', 'sucursal', 'tipo', 'motivo']
+    search_fields = ['producto__nombre', 'producto__codigo', 'nota']
+    date_hierarchy = 'fecha'

@@ -78,119 +78,118 @@ class InventarioSucursal(TimeStampedModel):
         return inv
 
 
-class Proveedor(GymModel):
-    nombre = models.CharField(max_length=150)
-    telefono = models.CharField(max_length=30, blank=True)
-    correo = models.EmailField(blank=True)
+class Movimiento(GymModel):
+    """
+    Todo lo que entra y sale del inventario, en un solo libro.
 
-    class Meta:
-        ordering = ['nombre']
-        verbose_name = 'Proveedor'
-        verbose_name_plural = 'Proveedores'
+    Antes las entradas eran compras con cabecera y lineas, y las salidas no se
+    anotaban en ningun lado: la venta movia el stock directo y una merma se
+    corregia a mano. Asi no habia forma de responder por que hay lo que hay.
+    Ahora cada cambio de existencias deja su renglon, con su motivo.
+    """
 
-    def __str__(self):
-        return self.nombre
+    ENTRADA = 'entrada'
+    SALIDA = 'salida'
+    TIPOS = [(ENTRADA, 'Entrada'), (SALIDA, 'Salida')]
 
+    COMPRA = 'compra'
+    DEVOLUCION = 'devolucion'
+    VENTA = 'venta'
+    MERMA = 'merma'
+    AJUSTE = 'ajuste'
+    MOTIVOS = [
+        (COMPRA, 'Compra'),
+        (DEVOLUCION, 'Devolucion de un cliente'),
+        (VENTA, 'Venta'),
+        (MERMA, 'Merma'),
+        (AJUSTE, 'Ajuste de conteo'),
+    ]
+    #: Que motivos suma y cuales resta. El ajuste puede ir en las dos.
+    MOTIVOS_ENTRADA = [COMPRA, DEVOLUCION, AJUSTE]
+    MOTIVOS_SALIDA = [VENTA, MERMA, AJUSTE]
 
-class Compra(GymModel):
-    """Cabecera de compras. Al confirmar suma stock a la sucursal."""
-
-    BORRADOR = 'borrador'
-    CONFIRMADA = 'confirmada'
-    ESTADOS = [(BORRADOR, 'Borrador'), (CONFIRMADA, 'Confirmada')]
-
-    sucursal = models.ForeignKey(
-        'core.Sucursal', on_delete=models.PROTECT, related_name='compras'
+    producto = models.ForeignKey(
+        Producto, on_delete=models.PROTECT, related_name='movimientos'
     )
-    # Opcional: cargar existencias no siempre implica anotar a quien se le compro.
-    proveedor = models.ForeignKey(
-        Proveedor,
-        on_delete=models.PROTECT,
-        related_name='compras',
+    sucursal = models.ForeignKey(
+        'core.Sucursal', on_delete=models.PROTECT, related_name='movimientos'
+    )
+    tipo = models.CharField(max_length=7, choices=TIPOS)
+    motivo = models.CharField(max_length=12, choices=MOTIVOS)
+    cantidad = models.PositiveIntegerField()
+    #: Lo que costo la pieza en una entrada; lo que se cobro en una salida.
+    precio = models.DecimalField(max_digits=10, decimal_places=2, default=0)
+    fecha = models.DateTimeField(default=timezone.now)
+    usuario = models.ForeignKey(
+        'accounts.User', on_delete=models.PROTECT, related_name='movimientos', null=True
+    )
+    nota = models.CharField(max_length=200, blank=True)
+    #: Puesto cuando la salida la genero el punto de venta.
+    venta_detalle = models.ForeignKey(
+        'ventas.VentaDetalle',
+        on_delete=models.SET_NULL,
+        related_name='movimientos',
         null=True,
         blank=True,
     )
-    usuario = models.ForeignKey(
-        'accounts.User', on_delete=models.PROTECT, related_name='compras', null=True
-    )
-    fecha = models.DateTimeField(default=timezone.now)
-    total = models.DecimalField(max_digits=12, decimal_places=2, default=0)
-    estado = models.CharField(max_length=10, choices=ESTADOS, default=BORRADOR)
 
     class Meta:
-        ordering = ['-fecha']
-        verbose_name = 'Compra'
-        verbose_name_plural = 'Compras'
+        ordering = ['-fecha', '-pk']
+        verbose_name = 'Movimiento de inventario'
+        verbose_name_plural = 'Movimientos de inventario'
 
     def __str__(self):
-        return f'Compra #{self.pk} - {self.proveedor}'
+        return f'{self.get_tipo_display()} de {self.cantidad} {self.producto}'
 
-    def recalcular_total(self):
-        total = sum(d.subtotal for d in self.detalles.all())
-        Compra.objects.filter(pk=self.pk).update(total=total)
-        self.total = total
-        return total
+    @property
+    def signo(self):
+        return 1 if self.tipo == self.ENTRADA else -1
 
-    def confirmar(self):
-        """Aplica el movimiento de inventario una sola vez."""
-        if self.estado == self.CONFIRMADA:
-            return False
-        for detalle in self.detalles.all():
-            InventarioSucursal.mover(detalle.producto, self.sucursal, detalle.cantidad)
-        self.estado = self.CONFIRMADA
-        self.recalcular_total()
-        self.save(update_fields=['estado', 'updated_at'])
-        return True
+    @property
+    def importe(self):
+        return self.cantidad * self.precio
 
     @classmethod
-    def registrar_entrada(
-        cls, producto, sucursal, cantidad, precio=None, proveedor=None, usuario=None
+    def registrar(
+        cls,
+        producto,
+        sucursal,
+        tipo,
+        motivo,
+        cantidad,
+        precio=None,
+        usuario=None,
+        nota='',
+        venta_detalle=None,
     ):
         """
-        Mercancia que entra de un solo producto, ya confirmada.
-
-        Es el camino corto para lo que mas se repite: llega mas de algo que ya
-        vendes. La compra de varias lineas sigue existiendo para un pedido
-        grande, pero obligar a recorrerla para un producto hacia que nadie la
-        usara y el stock se corrigiera a mano, sin dejar rastro del costo.
+        Anota el movimiento y mueve las existencias. Es la unica puerta: fuera
+        de aqui nadie toca el stock, o el libro dejaria de cuadrar.
         """
-        costo = producto.precio_compra if precio is None else precio
-        compra = cls.objects.create(
+        if precio is None:
+            precio = (
+                producto.precio_compra if tipo == cls.ENTRADA else producto.precio_venta
+            )
+
+        movimiento = cls.objects.create(
             gym=producto.gym,
+            producto=producto,
             sucursal=sucursal,
-            proveedor=proveedor,
+            tipo=tipo,
+            motivo=motivo,
+            cantidad=cantidad,
+            precio=precio,
             usuario=usuario,
+            nota=nota,
+            venta_detalle=venta_detalle,
         )
-        CompraDetalle.objects.create(
-            compra=compra, producto=producto, cantidad=cantidad, precio=costo
-        )
-        compra.confirmar()
+        InventarioSucursal.mover(producto, sucursal, movimiento.signo * cantidad)
 
         # El costo del producto sigue al de la ultima compra: es el que decide
         # el margen y el que se propone la proxima vez. Dejarlo viejo hace
         # creer que se gana cuando ya no.
-        if costo != producto.precio_compra:
-            producto.precio_compra = costo
+        if motivo == cls.COMPRA and precio != producto.precio_compra:
+            producto.precio_compra = precio
             producto.save(update_fields=['precio_compra', 'updated_at'])
 
-        return compra
-
-
-class CompraDetalle(TimeStampedModel):
-    compra = models.ForeignKey(Compra, on_delete=models.CASCADE, related_name='detalles')
-    producto = models.ForeignKey(
-        Producto, on_delete=models.PROTECT, related_name='compras_detalle'
-    )
-    cantidad = models.PositiveIntegerField(default=1)
-    precio = models.DecimalField(max_digits=10, decimal_places=2, default=0)
-
-    class Meta:
-        verbose_name = 'Detalle de compra'
-        verbose_name_plural = 'Detalles de compra'
-
-    def __str__(self):
-        return f'{self.producto} x{self.cantidad}'
-
-    @property
-    def subtotal(self):
-        return self.cantidad * self.precio
+        return movimiento

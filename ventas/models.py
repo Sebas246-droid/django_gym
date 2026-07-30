@@ -2,7 +2,7 @@ from django.db import models
 from django.utils import timezone
 
 from core.models import GymModel, TimeStampedModel
-from inventario.models import InventarioSucursal, Producto
+from inventario.models import Movimiento, Producto
 
 
 class Venta(GymModel):
@@ -90,8 +90,18 @@ class Venta(GymModel):
             if detalle.es_membresia:
                 self._asignar_membresia(detalle)
             else:
-                InventarioSucursal.mover(
-                    detalle.producto, self.sucursal, -detalle.cantidad
+                # Sale por el libro de movimientos, no tocando el stock
+                # directo: si no, la venta no aparece en el historial y las
+                # existencias cambian sin que nada explique por que.
+                Movimiento.registrar(
+                    producto=detalle.producto,
+                    sucursal=self.sucursal,
+                    tipo=Movimiento.SALIDA,
+                    motivo=Movimiento.VENTA,
+                    cantidad=detalle.cantidad,
+                    precio=detalle.precio,
+                    usuario=self.usuario,
+                    venta_detalle=detalle,
                 )
 
         self.estado = self.CONFIRMADA

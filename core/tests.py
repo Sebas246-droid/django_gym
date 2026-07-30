@@ -13,11 +13,9 @@ from core.roles import ADMINISTRADOR
 from core.views import DashboardView
 from inventario.models import (
     CategoriaProducto,
-    Compra,
-    CompraDetalle,
     InventarioSucursal,
+    Movimiento,
     Producto,
-    Proveedor,
 )
 from ventas.models import Venta, VentaDetalle
 
@@ -195,29 +193,27 @@ class FlujoCompletoTest(TestCase):
         self.assertEqual(asistencia.tipo, Asistencia.ENTRADA)
         self.assertEqual(asistencia.usuario, self.admin)
 
-    def test_compra_confirmada_suma_stock(self):
+    def test_una_entrada_suma_stock(self):
         categoria = CategoriaProducto.objects.create(gym=self.gym, nombre='Suplementos')
         producto = Producto.objects.create(
             gym=self.gym, categoria=categoria, codigo='P001',
             nombre='Proteina', precio_compra=300, precio_venta=500,
         )
-        proveedor = Proveedor.objects.create(gym=self.gym, nombre='Distribuidora X')
-        compra = Compra.objects.create(
-            gym=self.gym, sucursal=self.sucursal,
-            proveedor=proveedor, usuario=self.admin,
-        )
-        CompraDetalle.objects.create(
-            compra=compra, producto=producto, cantidad=10, precio=300
-        )
 
-        respuesta = self.client.post(reverse('inventario:compra_confirmar', args=[compra.pk]))
+        respuesta = self.client.post(reverse('inventario:movimiento_create'), {
+            'producto': producto.pk, 'sucursal': self.sucursal.pk,
+            'tipo': 'entrada', 'motivo': 'compra',
+            'cantidad': '10', 'precio': '300',
+        })
         self.assertEqual(respuesta.status_code, 302)
 
-        compra.refresh_from_db()
-        self.assertEqual(compra.estado, Compra.CONFIRMADA)
-        self.assertEqual(compra.total, 3000)
-        inventario = InventarioSucursal.objects.get(producto=producto, sucursal=self.sucursal)
+        inventario = InventarioSucursal.objects.get(
+            producto=producto, sucursal=self.sucursal
+        )
         self.assertEqual(inventario.stock, 10)
+        movimiento = Movimiento.objects.get(producto=producto)
+        self.assertEqual(movimiento.importe, 3000)
+        self.assertEqual(movimiento.usuario, self.admin)
 
     def test_venta_confirmada_descuenta_stock(self):
         categoria = CategoriaProducto.objects.create(gym=self.gym, nombre='Bebidas')

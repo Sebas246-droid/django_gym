@@ -1,0 +1,96 @@
+{% extends 'base.html' %}
+
+{% comment %}
+El libro del inventario: todo lo que entro y salio, con su motivo. Las ventas
+las anota el punto de venta al cobrar, por eso aparecen aqui sin haberlas
+capturado nadie.
+{% endcomment %}
+
+{% block title %}Movimientos - GymPilot{% endblock %}
+{% block migas %}
+  / <a href="{% url 'inventario:producto_list' %}">Inventario</a> / <span>Movimientos</span>
+{% endblock %}
+{% block encabezado %}Movimientos{% endblock %}
+
+{% block acciones %}
+  <a href="{% url 'inventario:producto_list' %}" class="btn">Inventario</a>
+  <a href="{% url 'inventario:movimiento_create' %}" class="btn btn-primario">
+    Nuevo movimiento
+  </a>
+{% endblock %}
+
+{% block acciones_derecha %}
+  <form method="get" class="o-filtros">
+    <select name="producto" onchange="this.form.submit()">
+      <option value="">Todos los productos</option>
+      {% for p in productos %}
+        <option value="{{ p.pk }}" {% if producto_id == p.pk|stringformat:'s' %}selected{% endif %}>
+          {{ p.nombre }}
+        </option>
+      {% endfor %}
+    </select>
+    <select name="motivo" onchange="this.form.submit()">
+      <option value="">Todos los motivos</option>
+      {% for valor, etiqueta in motivos %}
+        <option value="{{ valor }}" {% if motivo == valor %}selected{% endif %}>
+          {{ etiqueta }}
+        </option>
+      {% endfor %}
+    </select>
+    <noscript><button type="submit" class="btn">Filtrar</button></noscript>
+  </form>
+{% endblock %}
+
+{% block content %}
+<div class="o-tabla-caja">
+  <table class="o-lista">
+    <thead>
+      <tr>
+        <th>Fecha</th><th>Producto</th><th>Motivo</th><th>Sucursal</th>
+        <th class="num">Cant.</th><th class="num">Importe</th><th>Quien</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for m in movimientos %}
+        <tr>
+          <td class="texto-tenue">{{ m.fecha|date:'d/m/Y H:i' }}</td>
+          <td>
+            <strong>{{ m.producto.nombre }}</strong>
+            <span class="texto-tenue">{{ m.producto.codigo }}</span>
+          </td>
+          <td>
+            {% if m.tipo == 'entrada' %}
+              <span class="pill pill-ok">{{ m.get_motivo_display }}</span>
+            {% else %}
+              <span class="pill pill-alerta">{{ m.get_motivo_display }}</span>
+            {% endif %}
+            {% if m.nota %}<span class="texto-tenue">{{ m.nota }}</span>{% endif %}
+          </td>
+          <td class="texto-tenue">{{ m.sucursal }}</td>
+          <td class="num">
+            <strong>{% if m.tipo == 'salida' %}-{% else %}+{% endif %}{{ m.cantidad }}</strong>
+          </td>
+          <td class="num texto-tenue">{{ m.importe }}</td>
+          <td class="texto-tenue">{{ m.usuario|default:'-' }}</td>
+        </tr>
+      {% empty %}
+        <tr><td colspan="7" class="vacio">Sin movimientos todavia.</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+
+{% if is_paginated %}
+  <div class="o-paginacion">
+    {% if page_obj.has_previous %}
+      <a href="?page={{ page_obj.previous_page_number }}&motivo={{ motivo }}&producto={{ producto_id }}"
+         class="btn">Anterior</a>
+    {% endif %}
+    <span>Pagina {{ page_obj.number }} de {{ paginator.num_pages }}</span>
+    {% if page_obj.has_next %}
+      <a href="?page={{ page_obj.next_page_number }}&motivo={{ motivo }}&producto={{ producto_id }}"
+         class="btn">Siguiente</a>
+    {% endif %}
+  </div>
+{% endif %}
+{% endblock %}

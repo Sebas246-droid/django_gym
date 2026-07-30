@@ -14,21 +14,16 @@ from django.views.generic import (
 from core.mixins import GymFormMixin, GymQuerysetMixin, GymRequiredMixin, SoftDeleteView
 from inventario.forms import (
     CategoriaProductoForm,
-    CompraDetalleForm,
-    CompraForm,
-    EntradaForm,
     InventarioSucursalForm,
+    MovimientoForm,
     ProductoAltaForm,
     ProductoForm,
-    ProveedorForm,
 )
 from inventario.models import (
     CategoriaProducto,
-    Compra,
-    CompraDetalle,
     InventarioSucursal,
+    Movimiento,
     Producto,
-    Proveedor,
 )
 
 
@@ -117,75 +112,8 @@ class ProductoListView(GymQuerysetMixin, ListView):
         return ctx
 
 
-class EntradaProductoView(GymRequiredMixin, FormView):
-    """
-    Llego mas de algo que ya vendes. Pide cantidad y costo, y deja la compra
-    asentada: asi el stock sube con rastro del dinero, en un solo paso.
-    """
-
-    form_class = EntradaForm
-    template_name = 'inventario/entrada_form.html'
-    success_url = reverse_lazy('inventario:producto_list')
-
-    @property
-    def producto(self):
-        return get_object_or_404(
-            Producto, pk=self.kwargs['pk'], gym=self.gym, activo=True
-        )
-
-    def get_form_kwargs(self):
-        # No es un ModelForm: el gym se pasa a mano, sin GymFormMixin.
-        kwargs = super().get_form_kwargs()
-        kwargs['gym'] = self.gym
-        kwargs['producto'] = self.producto
-        return kwargs
-
-    def get_context_data(self, **kwargs):
-        ctx = super().get_context_data(**kwargs)
-        producto = self.producto
-        ctx['titulo'] = f'Entrada de {producto.nombre}'
-        ctx['producto'] = producto
-        # A quien y a cuanto se le ha comprado antes: sirve para decidir el
-        # costo de esta entrada sin salirse de la pantalla.
-        ctx['compras_previas'] = (
-            CompraDetalle.objects.filter(
-                producto=producto, compra__estado=Compra.CONFIRMADA
-            )
-            .select_related('compra', 'compra__proveedor')
-            .order_by('-compra__fecha')[:5]
-        )
-        return ctx
-
-    def form_valid(self, form):
-        # Una sola instancia: registrar_entrada la modifica si cambia el costo.
-        producto = self.producto
-        costo_anterior = producto.precio_compra
-        cantidad = form.cleaned_data['cantidad']
-
-        compra = Compra.registrar_entrada(
-            producto=producto,
-            sucursal=form.cleaned_data['sucursal'],
-            cantidad=cantidad,
-            precio=form.cleaned_data.get('precio'),
-            proveedor=form.cleaned_data.get('proveedor'),
-            usuario=self.request.user,
-        )
-
-        aviso = (
-            f'Entraron {cantidad} de {producto.nombre}. Quedan '
-            f'{producto.stock_en(compra.sucursal)} en {compra.sucursal}.'
-        )
-        if producto.precio_compra != costo_anterior:
-            aviso += (
-                f' El costo pasa de {costo_anterior} a {producto.precio_compra}, '
-                'que es con el que se calcula la ganancia.'
-            )
-        messages.success(self.request, aviso)
-        return super().form_valid(form)
-
-
 class ProductoCreateView(GymFormMixin, CreateView):
-    """El alta carga tambien las existencias, levantando la compra que las respalda."""
+    """El alta carga tambien las existencias, dejando su movimiento de entrada."""
 
     model = Producto
     form_class = ProductoAltaForm
@@ -198,24 +126,24 @@ class ProductoCreateView(GymFormMixin, CreateView):
         with transaction.atomic():
             respuesta = super().form_valid(form)
             if cantidad:
-                self.compra = Compra.registrar_entrada(
+                self.entrada = Movimiento.registrar(
                     producto=self.object,
                     sucursal=form.cleaned_data['sucursal'],
+                    tipo=Movimiento.ENTRADA,
+                    motivo=Movimiento.COMPRA,
                     cantidad=cantidad,
-                    proveedor=form.cleaned_data.get('proveedor'),
                     usuario=self.request.user,
+                    nota='Existencias iniciales',
                 )
         return respuesta
 
     def get_success_url(self):
-        compra = getattr(self, 'compra', None)
-        if compra is None:
-            return super().get_success_url()
-        messages.success(
-            self.request,
-            f'Se registro la compra #{compra.pk} con {compra.detalles.first().cantidad} '
-            f'piezas en {compra.sucursal}.',
-        )
+        entrada = getattr(self, 'entrada', None)
+        if entrada is not None:
+            messages.success(
+                self.request,
+                f'Entraron {entrada.cantidad} piezas en {entrada.sucursal}.',
+            )
         return super().get_success_url()
 
 
@@ -249,119 +177,85 @@ class InventarioUpdateView(GymRequiredMixin, UpdateView):
         return InventarioSucursal.objects.filter(producto__gym=self.gym)
 
 
-# --- Proveedores ----------------------------------------------------------
+# --- Movimientos ----------------------------------------------------------
 
 
-class ProveedorListView(GymQuerysetMixin, ListView):
-    model = Proveedor
-    template_name = 'inventario/proveedor_list.html'
-    context_object_name = 'proveedores'
+class MovimientoListView(GymQuerysetMixin, ListView):
+    """El libro: todo lo que entro y salio, y por que."""
 
-
-class ProveedorCreateView(GymFormMixin, CreateView):
-    model = Proveedor
-    form_class = ProveedorForm
-    template_name = 'core/form.html'
-    success_url = reverse_lazy('inventario:proveedor_list')
-    extra_context = {'titulo': 'Nuevo proveedor'}
-
-
-class ProveedorUpdateView(GymFormMixin, UpdateView):
-    model = Proveedor
-    form_class = ProveedorForm
-    template_name = 'core/form.html'
-    success_url = reverse_lazy('inventario:proveedor_list')
-    extra_context = {'titulo': 'Editar proveedor'}
-
-
-class ProveedorDeleteView(SoftDeleteView):
-    model = Proveedor
-    success_url = reverse_lazy('inventario:proveedor_list')
-
-
-# --- Compras --------------------------------------------------------------
-
-
-class CompraListView(GymQuerysetMixin, ListView):
-    model = Compra
-    template_name = 'inventario/compra_list.html'
-    context_object_name = 'compras'
-    paginate_by = 30
+    model = Movimiento
+    template_name = 'inventario/movimiento_list.html'
+    context_object_name = 'movimientos'
+    paginate_by = 50
+    solo_activos = False  # un movimiento no se da de baja, se corrige con otro
 
     def get_queryset(self):
-        return super().get_queryset().select_related('proveedor', 'sucursal', 'usuario')
-
-
-class CompraCreateView(GymFormMixin, CreateView):
-    model = Compra
-    form_class = CompraForm
-    template_name = 'core/form.html'
-    extra_context = {'titulo': 'Nueva compra'}
-
-    def form_valid(self, form):
-        form.instance.usuario = self.request.user
-        return super().form_valid(form)
-
-    def get_success_url(self):
-        return reverse_lazy('inventario:compra_detail', args=[self.object.pk])
-
-
-class CompraDetailView(GymQuerysetMixin, DetailView):
-    model = Compra
-    template_name = 'inventario/compra_detail.html'
-    context_object_name = 'compra'
+        qs = super().get_queryset().select_related('producto', 'sucursal', 'usuario')
+        motivo = self.request.GET.get('motivo')
+        if motivo:
+            qs = qs.filter(motivo=motivo)
+        producto = self.request.GET.get('producto')
+        if producto:
+            qs = qs.filter(producto_id=producto)
+        return qs
 
     def get_context_data(self, **kwargs):
         ctx = super().get_context_data(**kwargs)
-        ctx['detalles'] = self.object.detalles.select_related('producto')
-        ctx['form'] = CompraDetalleForm(gym=self.gym)
+        ctx['motivos'] = Movimiento.MOTIVOS
+        ctx['motivo'] = self.request.GET.get('motivo', '')
+        ctx['productos'] = Producto.objects.filter(gym=self.gym, activo=True)
+        ctx['producto_id'] = self.request.GET.get('producto', '')
+        ctx['menu'] = 'inventario'
         return ctx
 
 
-class CompraDetalleCreateView(GymRequiredMixin, View):
-    def post(self, request, pk):
-        compra = get_object_or_404(Compra, pk=pk, gym=request.user.gym)
-        if compra.estado == Compra.CONFIRMADA:
-            messages.error(request, 'La compra ya esta confirmada.')
-            return redirect('inventario:compra_detail', pk=pk)
+class MovimientoCreateView(GymRequiredMixin, FormView):
+    """
+    Registrar a mano lo que entra o sale. Las ventas no pasan por aqui: las
+    anota el punto de venta al cobrar.
+    """
 
-        form = CompraDetalleForm(request.POST, gym=request.user.gym)
-        if form.is_valid():
-            detalle = form.save(commit=False)
-            detalle.compra = compra
-            detalle.precio = form.cleaned_data['precio']
-            detalle.save()
-            compra.recalcular_total()
-            messages.success(request, 'Producto agregado a la compra.')
-        else:
-            messages.error(request, f'Revisa los datos: {form.errors.as_text()}')
-        return redirect('inventario:compra_detail', pk=pk)
+    form_class = MovimientoForm
+    template_name = 'inventario/movimiento_form.html'
+    success_url = reverse_lazy('inventario:movimiento_list')
 
+    def get_form_kwargs(self):
+        kwargs = super().get_form_kwargs()
+        kwargs['gym'] = self.gym
+        kwargs['inicial_producto'] = self.request.GET.get('producto')
+        return kwargs
 
-class CompraDetalleDeleteView(GymRequiredMixin, View):
-    def post(self, request, pk, detalle_pk):
-        compra = get_object_or_404(Compra, pk=pk, gym=request.user.gym)
-        if compra.estado == Compra.CONFIRMADA:
-            messages.error(request, 'La compra ya esta confirmada.')
-            return redirect('inventario:compra_detail', pk=pk)
-        CompraDetalle.objects.filter(pk=detalle_pk, compra=compra).delete()
-        compra.recalcular_total()
-        messages.success(request, 'Producto eliminado de la compra.')
-        return redirect('inventario:compra_detail', pk=pk)
+    def get_context_data(self, **kwargs):
+        ctx = super().get_context_data(**kwargs)
+        ctx['titulo'] = 'Nuevo movimiento'
+        ctx['menu'] = 'inventario'
+        return ctx
 
+    def form_valid(self, form):
+        datos = form.cleaned_data
+        producto = datos['producto']
+        costo_anterior = producto.precio_compra
 
-class CompraConfirmarView(GymRequiredMixin, View):
-    """Confirmar compra => InventarioSucursal + cantidad."""
+        movimiento = Movimiento.registrar(
+            producto=producto,
+            sucursal=datos['sucursal'],
+            tipo=datos['tipo'],
+            motivo=datos['motivo'],
+            cantidad=datos['cantidad'],
+            precio=datos.get('precio'),
+            usuario=self.request.user,
+            nota=datos.get('nota', ''),
+        )
 
-    def post(self, request, pk):
-        compra = get_object_or_404(Compra, pk=pk, gym=request.user.gym)
-        if not compra.detalles.exists():
-            messages.error(request, 'La compra no tiene productos.')
-        else:
-            with transaction.atomic():
-                aplicada = compra.confirmar()
-            if aplicada:
-                messages.success(request, 'Compra confirmada. Inventario actualizado.')
-            else:
-                messages.info(request, 'La compra ya estaba confirmada.')
-        return redirect('inventario:compra_detail', pk=pk)
+        verbo = 'Entraron' if movimiento.tipo == Movimiento.ENTRADA else 'Salieron'
+        aviso = (
+            f'{verbo} {movimiento.cantidad} de {producto.nombre}. Quedan '
+            f'{producto.stock_en(movimiento.sucursal)} en {movimiento.sucursal}.'
+        )
+        if producto.precio_compra != costo_anterior:
+            aviso += (
+                f' El costo pasa de {costo_anterior} a {producto.precio_compra}, '
+                'que es con el que se calcula la ganancia.'
+            )
+        messages.success(self.request, aviso)
+        return super().form_valid(form)
