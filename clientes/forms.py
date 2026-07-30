@@ -10,7 +10,7 @@ from clientes.models import (
     ClienteMembresia,
     Membresia,
 )
-from core.forms import GymModelForm
+from core.forms import FechaInput, GymModelForm
 from core.models import Sucursal
 
 
@@ -46,7 +46,7 @@ class ClienteForm(GymModelForm):
             'nombre_contacto_emergencia',
             'telefono_contacto_emergencia',
         ]
-        widgets = {'fecha_nacimiento': forms.DateInput(attrs={'type': 'date'})}
+        widgets = {'fecha_nacimiento': FechaInput()}
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
@@ -116,15 +116,35 @@ class ClienteMembresiaForm(GymModelForm):
             'metodo_pago',
             'observaciones',
         ]
-        widgets = {'inicio': forms.DateInput(attrs={'type': 'date'})}
+        widgets = {'inicio': FechaInput()}
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        self.fields['precio'].required = False
-        self.fields['precio'].help_text = 'Si lo dejas vacio se toma el de la membresia.'
+        # Los dos se pueden dejar en blanco, asi que se ven en blanco: un 0
+        # precargado se lee como un dato que ya esta puesto.
+        self._volver_opcional(
+            'precio',
+            'Precio (opcional)',
+            'Vacio toma el precio de la membresia.',
+        )
+        self._volver_opcional(
+            'descuento',
+            'Descuento (opcional)',
+            'Vacio es sin descuento.',
+        )
         self.fields['cliente'].widget.choices = self._opciones()
         if self.instance.pk and self.instance.cliente_id:
             self.initial['cliente'] = str(self.instance.cliente_id)
+
+    def _volver_opcional(self, nombre, etiqueta, ayuda):
+        campo = self.fields[nombre]
+        campo.required = False
+        campo.label = etiqueta
+        campo.help_text = ayuda
+        # El 0 viene del valor por omision del modelo; se quita para que el
+        # campo aparezca vacio y se vea que no hace falta llenarlo.
+        campo.initial = None
+        campo.widget.attrs['placeholder'] = '0'
 
     @property
     def sucursales(self):
@@ -149,8 +169,11 @@ class ClienteMembresiaForm(GymModelForm):
     def clean(self):
         datos = super().clean()
         membresia = datos.get('membresia')
-        if membresia and not datos.get('precio'):
+        if membresia and datos.get('precio') is None:
             datos['precio'] = membresia.precio
+        # El modelo no admite nulo en estos dos: en blanco significa cero.
+        if datos.get('descuento') is None:
+            datos['descuento'] = 0
 
         valor = datos.get('cliente')
         if not valor:

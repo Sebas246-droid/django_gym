@@ -1,6 +1,7 @@
 """Pruebas del acceso por numero de usuario y del sitio publico."""
 
-from datetime import timedelta
+import re
+from datetime import date, timedelta
 from unittest import mock
 
 from django.contrib.auth import get_user_model
@@ -541,3 +542,98 @@ class EditarCancelarMembresiaTest(BaseGymTest):
             {'volver': 'https://ejemplo-malicioso.test/'},
         )
         self.assertNotIn('ejemplo-malicioso', respuesta['Location'])
+
+
+class CamposDeFechaTest(BaseGymTest):
+    """
+    <input type="date"> solo entiende aaaa-mm-dd. Con el idioma en espanol
+    Django rendiriza 14/05/1990, el navegador lo descarta sin avisar y el campo
+    sale vacio: al guardar se pierde el dato.
+    """
+
+    def campo(self, html, nombre):
+        return re.search(rf'<input[^>]*name="{nombre}"[^>]*>', html).group(0)
+
+    def test_el_nacimiento_llega_al_navegador(self):
+        cliente = self.crear_cliente('Con fecha')
+        Cliente.objects.filter(pk=cliente.pk).update(fecha_nacimiento=date(1990, 5, 14))
+
+        html = self.client.get(
+            reverse('clientes:cliente_update', args=[cliente.pk])
+        ).content.decode()
+
+        self.assertIn('value="1990-05-14"', self.campo(html, 'fecha_nacimiento'))
+
+    def test_editar_no_borra_el_nacimiento(self):
+        cliente = self.crear_cliente('No se borra')
+        Cliente.objects.filter(pk=cliente.pk).update(fecha_nacimiento=date(1990, 5, 14))
+
+        html = self.client.get(
+            reverse('clientes:cliente_update', args=[cliente.pk])
+        ).content.decode()
+        valor = re.search(r'value="([\d-]+)"', self.campo(html, 'fecha_nacimiento'))
+        # Se reenvia tal cual lo mandaria el navegador con ese valor.
+        self.client.post(
+            reverse('clientes:cliente_update', args=[cliente.pk]),
+            {
+                'nombre': cliente.nombre, 'sucursal': self.sucursal.pk,
+                'fecha_nacimiento': valor.group(1),
+            },
+        )
+
+        cliente.refresh_from_db()
+        self.assertEqual(cliente.fecha_nacimiento, date(1990, 5, 14))
+
+    def test_el_inicio_propuesto_llega_al_navegador(self):
+        cliente = self.crear_cliente('Renueva')
+        vigente = self.vender_membresia(
+            cliente, timezone.localdate() - timedelta(days=10)
+        )
+
+        html = self.client.get(
+            f'{reverse("clientes:clientemembresia_create")}?cliente={cliente.pk}'
+        ).content.decode()
+
+        esperado = (vigente.fin + timedelta(days=1)).isoformat()
+        self.assertIn(f'value="{esperado}"', self.campo(html, 'inicio'))
+
+
+class PrecioYDescuentoOpcionalesTest(BaseGymTest):
+    def setUp(self):
+        super().setUp()
+        self.cliente = self.crear_cliente('Socio')
+
+    def vender(self, **extra):
+        return self.client.post(reverse('clientes:clientemembresia_create'), {
+            'cliente': str(self.cliente.pk),
+            'membresia': self.membresia.pk,
+            'inicio': timezone.localdate().isoformat(),
+            'metodo_pago': 'efectivo',
+            **extra,
+        })
+
+    def test_salen_vacios_y_no_con_un_cero_puesto(self):
+        html = self.client.get(
+            reverse('clientes:clientemembresia_create')
+        ).content.decode()
+        for nombre in ('precio', 'descuento'):
+            campo = re.search(rf'<input[^>]*name="{nombre}"[^>]*>', html).group(0)
+            self.assertNotIn('value=', campo)
+            self.assertIn('placeholder="0"', campo)
+
+    def test_sin_precio_toma_el_de_la_membresia(self):
+        self.vender()
+        venta = ClienteMembresia.objects.get(cliente=self.cliente)
+        self.assertEqual(venta.precio, self.membresia.precio)
+        self.assertEqual(venta.descuento, 0)
+
+    def test_un_precio_distinto_manda_sobre_el_del_catalogo(self):
+        self.vender(precio='450')
+        self.assertEqual(
+            ClienteMembresia.objects.get(cliente=self.cliente).precio, 450
+        )
+
+    def test_un_precio_de_cero_se_respeta(self):
+        """Una cortesia vale 0, y eso no es lo mismo que dejarlo en blanco."""
+        self.vender(precio='0')
+        self.assertEqual(ClienteMembresia.objects.get(cliente=self.cliente).precio, 0)

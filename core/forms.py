@@ -12,6 +12,21 @@ PALETAS = [
 ]
 
 
+class FechaInput(forms.DateInput):
+    """
+    Selector de fecha del navegador.
+
+    El formato es obligatorio: <input type="date"> solo entiende aaaa-mm-dd, y
+    con el idioma en espanol Django rendiriza 14/05/1990, que el navegador
+    descarta sin avisar. El campo sale vacio y al guardar se pierde el dato.
+    """
+
+    input_type = 'date'
+
+    def __init__(self, attrs=None):
+        super().__init__(attrs=attrs, format='%Y-%m-%d')
+
+
 class SinSufijoMixin:
     """Etiquetas sin los dos puntos finales que Django agrega por omision."""
 
