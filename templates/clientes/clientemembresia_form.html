@@ -12,7 +12,7 @@ el boton de al lado lo da de alta desde un modal, sin abandonar la venta.
 
 {% block content %}
 <div class="o-hoja o-hoja-angosta">
-  <form method="post" class="o-form">
+  <form method="post" enctype="multipart/form-data" class="o-form">
     {% csrf_token %}
     {% if form.non_field_errors %}
       <div class="o-mensaje error">{{ form.non_field_errors }}</div>

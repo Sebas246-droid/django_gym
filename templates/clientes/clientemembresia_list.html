@@ -45,6 +45,10 @@
           <td class="texto-tenue">{{ cm.get_metodo_pago_display }}</td>
           <td class="texto-tenue">{{ cm.usuario|default:'-' }}</td>
           <td class="acciones">
+            {% if cm.comprobante %}
+              <a href="{{ cm.comprobante.url }}" target="_blank" rel="noopener"
+                 class="btn-enlace">Comprobante</a>
+            {% endif %}
             {% if cm.estado != 'cancelada' %}
               <a href="{% url 'clientes:clientemembresia_update' cm.pk %}"
                  class="btn-enlace">Editar</a>

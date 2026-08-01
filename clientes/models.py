@@ -4,6 +4,7 @@ from django.db import IntegrityError, models, transaction
 from django.db.models.functions import Cast
 from django.utils import timezone
 
+from core.archivos import RutaPorGym, validar_comprobante
 from core.models import GymModel
 
 
@@ -205,6 +206,15 @@ class ClienteMembresia(GymModel):
         max_length=15, choices=METODOS_PAGO, default='efectivo'
     )
     fecha_pago = models.DateTimeField(default=timezone.now)
+    # Foto del ticket o PDF de la transferencia. Sirve para aclarar un cobro
+    # que el socio reclama meses despues, cuando ya nadie se acuerda.
+    comprobante = models.FileField(
+        upload_to=RutaPorGym('comprobantes'),
+        blank=True,
+        null=True,
+        validators=validar_comprobante,
+        help_text='Foto o PDF del pago. Opcional.',
+    )
     observaciones = models.TextField(blank=True)
     usuario = models.ForeignKey(
         'accounts.User',

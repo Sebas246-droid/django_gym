@@ -135,6 +135,13 @@ deja dinero; lo demas se usa de vez en cuando y cabe en el menu.
                 {% if cm.usuario %}<small>{{ cm.usuario }}</small>{% endif %}
               </td>
               <td class="acciones">
+                {% comment %}
+                Se abre aparte: puede ser un PDF y no hay que perder la ficha.
+                {% endcomment %}
+                {% if cm.comprobante %}
+                  <a href="{{ cm.comprobante.url }}" target="_blank" rel="noopener"
+                     class="btn-enlace">Comprobante</a>
+                {% endif %}
                 {% if cm.estado != 'cancelada' %}
                   <a href="{% url 'clientes:clientemembresia_update' cm.pk %}"
                      class="btn-enlace">Editar</a>

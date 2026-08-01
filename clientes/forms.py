@@ -114,6 +114,7 @@ class ClienteMembresiaForm(GymModelForm):
             'precio',
             'descuento',
             'metodo_pago',
+            'comprobante',
             'observaciones',
         ]
         widgets = {'inicio': FechaInput()}
@@ -131,6 +132,10 @@ class ClienteMembresiaForm(GymModelForm):
             'descuento',
             'Descuento (opcional)',
             'Vacio es sin descuento.',
+        )
+        self.fields['comprobante'].label = 'Comprobante (opcional)'
+        self.fields['comprobante'].help_text = (
+            'Foto del ticket o PDF de la transferencia. Hasta 10 MB.'
         )
         self.fields['cliente'].widget.choices = self._opciones()
         if self.instance.pk and self.instance.cliente_id:

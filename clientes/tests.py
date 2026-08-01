@@ -1,14 +1,18 @@
 """Pruebas del acceso por numero de usuario y del sitio publico."""
 
 import re
+import shutil
+import tempfile
 from datetime import date, timedelta
 from unittest import mock
 
+from django.conf import settings
 from django.contrib.auth import get_user_model
 from django.contrib.auth.models import Group
+from django.core.files.uploadedfile import SimpleUploadedFile
 from django.core.management import call_command
 from django.db import IntegrityError
-from django.test import TestCase
+from django.test import TestCase, override_settings
 from django.urls import reverse
 from django.utils import timezone
 
@@ -827,3 +831,123 @@ class AccionesDeLaFichaTest(BaseGymTest):
 
         self.cliente.refresh_from_db()
         self.assertFalse(self.cliente.activo)
+
+
+# Sin esto los archivos de prueba se quedan en la carpeta media del proyecto.
+@override_settings(MEDIA_ROOT=tempfile.mkdtemp())
+class ComprobanteDePagoTest(BaseGymTest):
+    """
+    Foto del ticket o PDF de la transferencia, para aclarar un cobro que el
+    socio reclama meses despues.
+    """
+
+    @classmethod
+    def tearDownClass(cls):
+        shutil.rmtree(settings.MEDIA_ROOT, ignore_errors=True)
+        super().tearDownClass()
+
+    def setUp(self):
+        super().setUp()
+        self.cliente = self.crear_cliente('Ana Torres')
+
+    @staticmethod
+    def archivo(nombre='ticket.jpg', peso=1024, tipo='image/jpeg'):
+        return SimpleUploadedFile(nombre, b'x' * peso, content_type=tipo)
+
+    def vender(self, comprobante=None):
+        datos = {
+            'cliente': str(self.cliente.pk),
+            'membresia': str(self.membresia.pk),
+            'inicio': timezone.localdate().isoformat(),
+            'metodo_pago': 'transferencia',
+            'precio': '600',
+            'descuento': '',
+            'observaciones': '',
+        }
+        if comprobante is not None:
+            datos['comprobante'] = comprobante
+        return self.client.post(reverse('clientes:clientemembresia_create'), datos)
+
+    def test_se_guarda_junto_a_la_venta(self):
+        self.vender(self.archivo())
+
+        venta = ClienteMembresia.objects.get()
+        self.assertTrue(venta.comprobante)
+        self.assertEqual(venta.comprobante.read(), b'x' * 1024)
+
+    def test_el_nombre_original_no_se_conserva(self):
+        """Viven en un bucket publico: 'ticket.jpg' seria una url adivinable."""
+        self.vender(self.archivo('ticket.jpg'))
+
+        ruta = ClienteMembresia.objects.get().comprobante.name
+
+        self.assertNotIn('ticket', ruta)
+        self.assertTrue(ruta.endswith('.jpg'))
+
+    def test_queda_separado_por_gimnasio(self):
+        self.vender(self.archivo())
+
+        self.assertIn(
+            f'comprobantes/{self.gym.pk}/', ClienteMembresia.objects.get().comprobante.name
+        )
+
+    def test_sigue_siendo_opcional(self):
+        self.vender()
+
+        venta = ClienteMembresia.objects.get()
+        self.assertFalse(venta.comprobante)
+
+    def test_un_pdf_tambien_entra(self):
+        self.vender(self.archivo('banco.pdf', tipo='application/pdf'))
+
+        self.assertTrue(ClienteMembresia.objects.get().comprobante)
+
+    def test_un_ejecutable_no(self):
+        respuesta = self.vender(self.archivo('virus.exe', tipo='application/exe'))
+
+        self.assertEqual(ClienteMembresia.objects.count(), 0)
+        self.assertContains(respuesta, 'extensi', status_code=200)
+
+    def test_uno_enorme_tampoco(self):
+        gordo = self.archivo(peso=11 * 1024 * 1024)
+
+        respuesta = self.vender(gordo)
+
+        self.assertEqual(ClienteMembresia.objects.count(), 0)
+        self.assertContains(respuesta, '10 MB', status_code=200)
+
+    def test_el_formulario_acepta_archivos(self):
+        """Sin enctype el navegador manda el nombre y no el archivo."""
+        respuesta = self.client.get(reverse('clientes:clientemembresia_create'))
+
+        self.assertContains(respuesta, 'enctype="multipart/form-data"')
+        self.assertContains(respuesta, 'type="file"')
+
+    def test_se_puede_abrir_desde_la_ficha(self):
+        self.vender(self.archivo())
+        venta = ClienteMembresia.objects.get()
+
+        respuesta = self.client.get(
+            reverse('clientes:cliente_detail', args=[self.cliente.pk])
+        )
+
+        self.assertContains(respuesta, venta.comprobante.url)
+
+    def test_editar_sin_tocarlo_no_lo_borra(self):
+        self.vender(self.archivo())
+        venta = ClienteMembresia.objects.get()
+        antes = venta.comprobante.name
+
+        self.client.post(reverse('clientes:clientemembresia_update', args=[venta.pk]), {
+            'cliente': str(self.cliente.pk),
+            'membresia': str(self.membresia.pk),
+            'inicio': venta.inicio.isoformat(),
+            'metodo_pago': 'efectivo',
+            'precio': '700',
+            'descuento': '',
+            'observaciones': '',
+        })
+
+        venta.refresh_from_db()
+        self.assertEqual(venta.comprobante.name, antes)
+        self.assertEqual(venta.precio, 700)
