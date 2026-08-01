@@ -127,9 +127,9 @@ class Cliente(GymModel):
 
     @property
     def membresia_vigente(self):
-        hoy = timezone.localdate()
         return (
-            self.membresias.filter(activo=True, inicio__lte=hoy, fin__gte=hoy)
+            ClienteMembresia.vigentes_en()
+            .filter(cliente=self)
             .order_by('-fin')
             .first()
         )
@@ -140,8 +140,16 @@ class Cliente(GymModel):
 
     @property
     def ultima_membresia(self):
-        """La mas reciente aunque este vencida: sirve para avisar en el acceso."""
-        return self.membresias.filter(activo=True).order_by('-fin').first()
+        """
+        La mas reciente aunque este vencida: sirve para avisar en el acceso.
+        Una cancelada no cuenta, o el aviso hablaria de algo que se deshizo.
+        """
+        return (
+            self.membresias.filter(activo=True)
+            .exclude(estado=ClienteMembresia.CANCELADA)
+            .order_by('-fin')
+            .first()
+        )
 
     @property
     def dias_restantes(self):
@@ -168,10 +176,13 @@ class Cliente(GymModel):
 class ClienteMembresia(GymModel):
     """Historial completo de compras de membresias (incluye el cobro)."""
 
+    VIGENTE = 'vigente'
+    VENCIDA = 'vencida'
+    CANCELADA = 'cancelada'
     ESTADOS = [
-        ('vigente', 'Vigente'),
-        ('vencida', 'Vencida'),
-        ('cancelada', 'Cancelada'),
+        (VIGENTE, 'Vigente'),
+        (VENCIDA, 'Vencida'),
+        (CANCELADA, 'Cancelada'),
     ]
     METODOS_PAGO = [
         ('efectivo', 'Efectivo'),
@@ -225,6 +236,19 @@ class ClienteMembresia(GymModel):
         return self.precio - self.descuento
 
     @classmethod
+    def vigentes_en(cls, dia=None):
+        """
+        Las que de verdad dan acceso ese dia.
+
+        Una cancelada tiene fechas que siguen abarcando hoy, asi que sin
+        excluirla el socio entraria al gimnasio con una membresia deshecha.
+        """
+        dia = dia or timezone.localdate()
+        return cls.objects.filter(
+            activo=True, inicio__lte=dia, fin__gte=dia
+        ).exclude(estado=cls.CANCELADA)
+
+    @classmethod
     def cobradas_aparte(cls, gym, dia):
         """
         Las cobradas desde su propia pantalla, que son las unicas cuyo dinero
@@ -233,13 +257,13 @@ class ClienteMembresia(GymModel):
         """
         return cls.objects.filter(
             gym=gym, activo=True, fecha_pago__date=dia, venta_detalle__isnull=True
-        ).exclude(estado='cancelada')
+        ).exclude(estado=cls.CANCELADA)
 
     def save(self, *args, **kwargs):
         if not self.fin:
             self.fin = self.inicio + timedelta(days=self.membresia.duracion_dias)
-        if self.estado == 'vigente' and self.fin < timezone.localdate():
-            self.estado = 'vencida'
+        if self.estado == self.VIGENTE and self.fin < timezone.localdate():
+            self.estado = self.VENCIDA
         super().save(*args, **kwargs)
 
 

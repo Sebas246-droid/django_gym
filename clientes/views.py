@@ -1,3 +1,5 @@
+from datetime import timedelta
+
 from django.contrib import messages
 from django.db.models import Q
 from django.shortcuts import get_object_or_404, redirect
@@ -28,6 +30,15 @@ class ClienteListView(GymQuerysetMixin, ListView):
     context_object_name = 'clientes'
     paginate_by = 25
 
+    #: Los mismos cortes que muestra el tablero, para poder abrir la lista de
+    #: quienes hay detras de cada numero.
+    ESTADOS = [
+        ('sin_membresia', 'Sin membresia'),
+        ('por_vencer', 'Por vencer'),
+        ('al_corriente', 'Al corriente'),
+    ]
+    DIAS_POR_VENCER = 7
+
     def get_queryset(self):
         qs = super().get_queryset().select_related('sucursal')
         q = self.request.GET.get('q', '').strip()
@@ -38,11 +49,35 @@ class ClienteListView(GymQuerysetMixin, ListView):
                 | Q(correo__icontains=q)
                 | Q(numero_usuario__startswith=q)
             )
-        return qs
+        return self._por_estado(qs)
+
+    def _por_estado(self, qs):
+        estado = self.request.GET.get('estado')
+        if estado not in dict(self.ESTADOS):
+            return qs
+
+        hoy = timezone.localdate()
+        vigentes = ClienteMembresia.vigentes_en(hoy).filter(gym=self.gym)
+        con_vigente = vigentes.values('cliente_id')
+
+        if estado == 'sin_membresia':
+            # Nunca compro, se le vencio o se le cancelo: para el caso es lo
+            # mismo, hoy no puede entrar.
+            return qs.exclude(pk__in=con_vigente)
+
+        pronto = vigentes.filter(
+            fin__lte=hoy + timedelta(days=self.DIAS_POR_VENCER)
+        ).values('cliente_id')
+        if estado == 'por_vencer':
+            return qs.filter(pk__in=pronto)
+        return qs.filter(pk__in=con_vigente).exclude(pk__in=pronto)
 
     def get_context_data(self, **kwargs):
         ctx = super().get_context_data(**kwargs)
         ctx['q'] = self.request.GET.get('q', '')
+        ctx['estados'] = self.ESTADOS
+        ctx['estado'] = self.request.GET.get('estado', '')
+        ctx['dias_por_vencer'] = self.DIAS_POR_VENCER
         return ctx
 
 

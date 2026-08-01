@@ -637,3 +637,118 @@ class PrecioYDescuentoOpcionalesTest(BaseGymTest):
         """Una cortesia vale 0, y eso no es lo mismo que dejarlo en blanco."""
         self.vender(precio='0')
         self.assertEqual(ClienteMembresia.objects.get(cliente=self.cliente).precio, 0)
+
+
+class CancelarQuitaElAccesoTest(BaseGymTest):
+    """
+    Cancelar dejaba las fechas intactas, asi que la membresia seguia
+    abarcando hoy y el socio entraba con algo ya deshecho.
+    """
+
+    def setUp(self):
+        super().setUp()
+        self.cliente = self.crear_cliente('Socio')
+        self.venta = self.vender_membresia(self.cliente, timezone.localdate())
+
+    def cancelar(self):
+        return self.client.post(
+            reverse('clientes:clientemembresia_cancelar', args=[self.venta.pk])
+        )
+
+    def test_deja_de_estar_vigente(self):
+        self.assertTrue(self.cliente.esta_al_corriente)
+
+        self.cancelar()
+
+        self.assertFalse(self.cliente.esta_al_corriente)
+        self.assertIsNone(self.cliente.membresia_vigente)
+
+    def test_ya_no_puede_entrar(self):
+        self.cancelar()
+
+        self.client.post(
+            reverse('clientes:checkin'),
+            {'numero_usuario': self.cliente.numero_usuario},
+        )
+
+        self.assertNotEqual(self.client.session['acceso']['estado'], 'ok')
+
+    def test_no_aparece_como_su_ultima_membresia(self):
+        """El aviso del acceso hablaria de algo que se deshizo."""
+        self.cancelar()
+        self.assertIsNone(self.cliente.ultima_membresia)
+
+    def test_deja_de_contar_en_la_caja(self):
+        hoy = timezone.localdate()
+        self.assertEqual(
+            sum(cm.total for cm in ClienteMembresia.cobradas_aparte(self.gym, hoy)),
+            600,
+        )
+
+        self.cancelar()
+
+        self.assertEqual(
+            sum(cm.total for cm in ClienteMembresia.cobradas_aparte(self.gym, hoy)), 0
+        )
+
+    def test_el_tablero_deja_de_contarla_en_la_cartera(self):
+        self.cancelar()
+
+        respuesta = self.client.get(reverse('core:dashboard'))
+
+        self.assertEqual(respuesta.context['membresias_vigentes'], 0)
+        self.assertEqual(respuesta.context['sin_membresia'], 1)
+
+    def test_libera_la_fecha_para_la_siguiente(self):
+        """Encadenar tras una cancelada regalaria dias que ya nadie pago."""
+        self.cancelar()
+        self.assertEqual(
+            self.cliente.inicio_siguiente_membresia, timezone.localdate()
+        )
+
+
+class FiltrosDeClientesTest(BaseGymTest):
+    """Los mismos cortes del tablero, para ver quien hay detras del numero."""
+
+    def setUp(self):
+        super().setUp()
+        hoy = timezone.localdate()
+        self.al_corriente = self.crear_cliente('Al corriente')
+        self.vender_membresia(self.al_corriente, hoy)
+
+        self.por_vencer = self.crear_cliente('Por vencer')
+        self.vender_membresia(self.por_vencer, hoy - timedelta(days=27))
+
+        self.sin_nada = self.crear_cliente('Sin nada')
+
+        self.vencido = self.crear_cliente('Vencido')
+        self.vender_membresia(self.vencido, hoy - timedelta(days=90))
+
+    def filtrar(self, estado):
+        respuesta = self.client.get(
+            reverse('clientes:cliente_list'), {'estado': estado}
+        )
+        return [c.nombre for c in respuesta.context['clientes']]
+
+    def test_sin_membresia_junta_a_quien_hoy_no_puede_entrar(self):
+        nombres = self.filtrar('sin_membresia')
+        self.assertCountEqual(nombres, ['Sin nada', 'Vencido'])
+
+    def test_por_vencer_son_los_de_los_proximos_siete_dias(self):
+        self.assertEqual(self.filtrar('por_vencer'), ['Por vencer'])
+
+    def test_al_corriente_excluye_a_los_que_ya_urgen(self):
+        self.assertEqual(self.filtrar('al_corriente'), ['Al corriente'])
+
+    def test_una_cancelada_cae_en_sin_membresia(self):
+        venta = self.al_corriente.membresias.get()
+        ClienteMembresia.objects.filter(pk=venta.pk).update(estado='cancelada')
+
+        self.assertIn('Al corriente', self.filtrar('sin_membresia'))
+
+    def test_sin_filtro_salen_todos(self):
+        respuesta = self.client.get(reverse('clientes:cliente_list'))
+        self.assertEqual(len(respuesta.context['clientes']), 4)
+
+    def test_un_filtro_inventado_no_recorta_la_lista(self):
+        self.assertEqual(len(self.filtrar('lo-que-sea')), 4)

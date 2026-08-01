@@ -182,9 +182,9 @@ class DashboardView(GymRequiredMixin, TemplateView):
         # --- Cartera de clientes -------------------------------------------
         clientes = Cliente.objects.filter(gym=gym, activo=True)
         total = clientes.count()
-        vigentes_qs = ClienteMembresia.objects.filter(
-            gym=gym, activo=True, inicio__lte=hoy, fin__gte=hoy
-        )
+        # Una cancelada conserva fechas que abarcan hoy: sin excluirla, la
+        # cartera se veria mas sana de lo que esta.
+        vigentes_qs = ClienteMembresia.vigentes_en(hoy).filter(gym=gym)
         vigentes = vigentes_qs.values('cliente_id').distinct().count()
         por_vencer_total = (
             vigentes_qs.filter(fin__lte=en_una_semana)
@@ -242,9 +242,7 @@ class DashboardView(GymRequiredMixin, TemplateView):
 
         # --- Listas accionables --------------------------------------------
         ctx['por_vencer'] = (
-            ClienteMembresia.objects.filter(
-                gym=gym, activo=True, fin__gte=hoy, fin__lte=en_una_semana
-            )
+            vigentes_qs.filter(fin__lte=en_una_semana)
             .select_related('cliente', 'membresia')
             .order_by('fin')[:4]
         )
