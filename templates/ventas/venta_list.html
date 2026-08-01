@@ -4,8 +4,13 @@
 {% block migas %}/ <span>Ventas</span>{% endblock %}
 {% block encabezado %}Ventas{% endblock %}
 
+{% comment %}
+Aqui no se cobra: esto es el historial de lo ya cobrado. Quien viene a vender
+va al punto de venta, y quien viene a vender una membresia a su pantalla.
+{% endcomment %}
 {% block acciones %}
-  <a href="{% url 'ventas:venta_create' %}" class="btn btn-primario">Nueva venta</a>
+  <a href="{% url 'ventas:pos' %}" class="btn btn-primario">Punto de venta</a>
+  <a href="{% url 'clientes:clientemembresia_create' %}" class="btn">Vender membresia</a>
   <a href="{% url 'clientes:clientemembresia_list' %}" class="btn">Ventas de membresia</a>
 {% endblock %}
 
@@ -16,7 +21,7 @@
       <tr>
         <th>#</th><th>Fecha</th><th>Cliente</th><th>Sucursal</th>
         <th class="num">Subtotal</th><th class="num">Desc.</th><th class="num">Total</th>
-        <th>Pago</th><th>Estado</th><th class="acciones"></th>
+        <th>Pago</th><th class="acciones"></th>
       </tr>
     </thead>
     <tbody>
@@ -30,19 +35,15 @@
           <td class="num">{{ v.descuento }}</td>
           <td class="num"><strong>{{ v.total }}</strong></td>
           <td class="texto-tenue">{{ v.get_metodo_pago_display }}</td>
-          <td>
-            {% if v.estado == 'confirmada' %}
-              <span class="pill pill-ok">Confirmada</span>
-            {% else %}
-              <span class="pill pill-aviso">Borrador</span>
-            {% endif %}
-          </td>
           <td class="acciones">
-            <a href="{% url 'ventas:venta_detail' v.pk %}" class="btn-enlace">Abrir</a>
+            <a href="{% url 'ventas:venta_detail' v.pk %}" class="btn-enlace">Ticket</a>
           </td>
         </tr>
       {% empty %}
-        <tr><td colspan="10" class="vacio">Sin ventas.</td></tr>
+        <tr><td colspan="9" class="vacio">
+          Sin ventas cobradas. Se cobra en el
+          <a href="{% url 'ventas:pos' %}">punto de venta</a>.
+        </td></tr>
       {% endfor %}
     </tbody>
   </table>

@@ -229,8 +229,8 @@ class FlujoCompletoTest(TestCase):
         )
         VentaDetalle.objects.create(venta=venta, producto=producto, cantidad=3, precio=15)
 
-        respuesta = self.client.post(reverse('ventas:venta_confirmar', args=[venta.pk]))
-        self.assertEqual(respuesta.status_code, 302)
+        ok, _ = venta.confirmar()
+        self.assertTrue(ok)
 
         venta.refresh_from_db()
         self.assertEqual(venta.estado, Venta.CONFIRMADA)
@@ -250,7 +250,9 @@ class FlujoCompletoTest(TestCase):
         )
         VentaDetalle.objects.create(venta=venta, producto=producto, cantidad=2, precio=200)
 
-        self.client.post(reverse('ventas:venta_confirmar', args=[venta.pk]))
+        ok, _ = venta.confirmar()
+        self.assertFalse(ok)
+
         venta.refresh_from_db()
         self.assertEqual(venta.estado, Venta.BORRADOR)
 

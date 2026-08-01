@@ -7,20 +7,15 @@
 {% block encabezado %}Venta #{{ venta.pk }}{% endblock %}
 
 {% block acciones %}
-  {% if venta.estado == 'borrador' %}
-    <form method="post" action="{% url 'ventas:venta_confirmar' venta.pk %}">
-      {% csrf_token %}
-      <button type="submit" class="btn btn-primario">Confirmar y cobrar</button>
-    </form>
-  {% endif %}
+  <a href="{% url 'ventas:pos' %}" class="btn btn-primario">Punto de venta</a>
   <a href="{% url 'ventas:venta_list' %}" class="btn">Volver</a>
 {% endblock %}
 
 {% block acciones_derecha %}
   {% if venta.estado == 'confirmada' %}
-    <span class="pill pill-ok">Confirmada</span>
+    <span class="pill pill-ok">Cobrada</span>
   {% else %}
-    <span class="pill pill-aviso">Borrador</span>
+    <span class="pill pill-aviso">Carrito abierto</span>
   {% endif %}
 {% endblock %}
 
@@ -36,22 +31,12 @@
         <tr><th>Sucursal</th><td>{{ venta.sucursal }}</td></tr>
         <tr><th>Fecha</th><td>{{ venta.fecha|date:'d/m/Y H:i' }}</td></tr>
         <tr><th>Metodo</th><td>{{ venta.get_metodo_pago_display }}</td></tr>
-        <tr><th>Usuario</th><td>{{ venta.usuario|default:'-' }}</td></tr>
+        <tr><th>Cobro</th><td>{{ venta.usuario|default:'-' }}</td></tr>
         <tr><th>Subtotal</th><td>{{ venta.subtotal }}</td></tr>
         <tr><th>Descuento</th><td>{{ venta.descuento }}</td></tr>
         <tr><th>Total</th><td><strong style="font-size:19px">{{ venta.total }}</strong></td></tr>
       </tbody>
     </table>
-
-    {% if venta.estado == 'borrador' %}
-      <h3>Agregar producto</h3>
-      <form method="post" action="{% url 'ventas:venta_detalle_create' venta.pk %}"
-            class="o-form">
-        {% csrf_token %}
-        {{ form.as_p }}
-        <button type="submit" class="btn">Agregar</button>
-      </form>
-    {% endif %}
   </div>
 
   <div class="o-hoja">
@@ -60,7 +45,7 @@
       <thead>
         <tr>
           <th>Producto</th><th class="num">Cantidad</th><th class="num">Precio</th>
-          <th class="num">Subtotal</th><th class="acciones"></th>
+          <th class="num">Subtotal</th>
         </tr>
       </thead>
       <tbody>
@@ -75,30 +60,26 @@
             <td class="num">{{ d.cantidad }}</td>
             <td class="num">{{ d.precio }}</td>
             <td class="num">{{ d.subtotal }}</td>
-            <td class="acciones">
-              {% if venta.estado == 'borrador' %}
-                <form method="post"
-                      action="{% url 'ventas:venta_detalle_delete' venta.pk d.pk %}">
-                  {% csrf_token %}
-                  <button type="submit" class="btn-enlace">Quitar</button>
-                </form>
-              {% endif %}
-            </td>
           </tr>
         {% empty %}
-          <tr><td colspan="5" class="vacio">Sin productos. Agrega el primero.</td></tr>
+          <tr><td colspan="4" class="vacio">Sin productos.</td></tr>
         {% endfor %}
       </tbody>
     </table>
 
-    {% if venta.estado == 'borrador' %}
+    {% comment %}
+    El ticket es historia: ya se cobro y ya movio inventario, no se edita.
+    Un borrador es el carrito de alguien en la caja, y se trabaja alla.
+    {% endcomment %}
+    {% if venta.estado == 'confirmada' %}
       <p class="texto-tenue" style="margin-top:14px">
-        Al confirmar se descuenta el stock de <strong>{{ venta.sucursal }}</strong>.
-        Si algun producto no alcanza, la venta no se confirma.
+        Cobrada. El inventario de {{ venta.sucursal }} ya fue descontado.
       </p>
     {% else %}
       <p class="texto-tenue" style="margin-top:14px">
-        Venta confirmada: el inventario ya fue descontado.
+        Es un carrito abierto en el
+        <a href="{% url 'ventas:pos' %}">punto de venta</a>: todavia no se cobra
+        ni descuenta inventario.
       </p>
     {% endif %}
   </div>

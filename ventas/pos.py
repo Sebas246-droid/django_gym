@@ -33,8 +33,12 @@ class CarritoMixin(GymRequiredMixin):
         ).first()
 
     def carrito(self, crear=True):
+        # La sucursal entra en la busqueda: si al cajero lo cambiaron de sede,
+        # su carrito viejo descontaria el stock de la sede anterior mientras la
+        # pantalla promete descontarlo de esta.
         venta = Venta.objects.filter(
             gym=self.gym,
+            sucursal=self.sucursal,
             usuario=self.request.user,
             estado=Venta.BORRADOR,
             activo=True,

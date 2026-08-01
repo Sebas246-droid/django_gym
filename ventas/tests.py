@@ -8,7 +8,7 @@ from django.core.management import call_command
 from django.db.models import Sum
 from django.db.utils import IntegrityError
 from django.test import TestCase
-from django.urls import reverse
+from django.urls import NoReverseMatch, reverse
 from django.utils import timezone
 
 from clientes.models import Cliente, ClienteMembresia, Membresia
@@ -340,3 +340,81 @@ class MembresiaComoLineaTest(PuntoDeVentaTest):
         # El nombre del plan no debe salir en la rejilla (el menu lateral si
         # dice "Membresias", por eso se busca el nombre y no la palabra).
         self.assertNotContains(respuesta, self.membresia.nombre)
+
+
+class HistorialDeVentasTest(PuntoDeVentaTest):
+    """
+    Ventas es historial, no una caja mas. La pantalla de armar la venta a mano
+    creaba borradores en cero que se listaban como si fueran ventas.
+    """
+
+    def listar(self):
+        return self.client.get(reverse('ventas:venta_list'))
+
+    def test_el_carrito_abierto_no_se_lista_como_venta(self):
+        self.agregar()
+
+        self.assertEqual(list(self.listar().context['ventas']), [])
+
+    def test_lo_cobrado_si_aparece(self):
+        self.agregar()
+        self.client.post(reverse('ventas:pos_cobrar'), {'metodo_pago': 'efectivo'})
+
+        self.assertEqual(len(self.listar().context['ventas']), 1)
+
+    def test_manda_al_punto_de_venta_para_cobrar(self):
+        self.assertContains(self.listar(), reverse('ventas:pos'))
+
+    def test_ya_no_se_arma_una_venta_a_mano(self):
+        """Las rutas del alta a mano no deben existir ni por url directa."""
+        for nombre in (
+            'venta_create', 'venta_confirmar',
+            'venta_detalle_create', 'venta_detalle_delete',
+        ):
+            with self.assertRaises(NoReverseMatch):
+                reverse(f'ventas:{nombre}', args=[1, 2])
+
+    def test_el_ticket_no_deja_editar(self):
+        self.agregar()
+        self.client.post(reverse('ventas:pos_cobrar'), {'metodo_pago': 'efectivo'})
+        venta = Venta.objects.get(estado=Venta.CONFIRMADA)
+
+        cuerpo = self.client.get(
+            reverse('ventas:venta_detail', args=[venta.pk])
+        ).content.decode()
+
+        self.assertNotIn('Agregar', cuerpo)
+        self.assertNotIn('Quitar', cuerpo)
+
+    def test_no_se_ve_el_ticket_de_otro_gimnasio(self):
+        otro = Gym.objects.create(nombre='Otro', plan=Plan.objects.get(nombre='Basico'))
+        ajena = Venta.objects.create(
+            gym=otro, sucursal=Sucursal.objects.get(gym=otro), estado=Venta.CONFIRMADA
+        )
+
+        self.assertEqual(
+            self.client.get(
+                reverse('ventas:venta_detail', args=[ajena.pk])
+            ).status_code,
+            404,
+        )
+
+
+class CarritoPorSucursalTest(PuntoDeVentaTest):
+    def test_al_cambiar_de_sede_no_arrastra_el_carrito_viejo(self):
+        """
+        Descontaria el stock de la sede anterior mientras la pantalla promete
+        descontarlo de esta.
+        """
+        self.agregar()
+        viejo = self.carrito()
+
+        otra = Sucursal.objects.create(gym=self.gym, nombre='Norte')
+        self.cajero.sucursal = otra
+        self.cajero.save(update_fields=['sucursal'])
+
+        self.agregar()
+
+        nuevo = Venta.objects.filter(estado=Venta.BORRADOR, sucursal=otra).first()
+        self.assertIsNotNone(nuevo)
+        self.assertNotEqual(nuevo.pk, viejo.pk)
