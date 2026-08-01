@@ -405,6 +405,103 @@ class SitioPublicoTest(BaseGymTest):
         self.assertContains(respuesta, visible.titulo)
         self.assertNotContains(respuesta, oculta.titulo)
 
+    def test_solo_salen_las_membresias_marcadas_para_el_sitio(self):
+        publicada = Membresia.objects.create(
+            gym=self.gym, nombre='Anual todo incluido', precio=6000,
+            duracion_dias=365, visible_en_sitio=True,
+        )
+
+        respuesta = self.client.get(reverse('core:landing', args=[self.gym.slug]))
+
+        self.assertContains(respuesta, publicada.nombre)
+        # La del catalogo interno nace oculta y no debe asomarse
+        self.assertNotContains(respuesta, self.membresia.nombre)
+
+    def test_el_admin_elige_que_membresias_se_publican(self):
+        otra = Membresia.objects.create(
+            gym=self.gym, nombre='Semanal', precio=200, duracion_dias=7,
+            visible_en_sitio=True,
+        )
+
+        respuesta = self.client.post(
+            reverse('core:sitio_membresias'), {'visibles': [str(self.membresia.pk)]}
+        )
+        self.assertEqual(respuesta.status_code, 302)
+
+        self.membresia.refresh_from_db()
+        otra.refresh_from_db()
+        self.assertTrue(self.membresia.visible_en_sitio)
+        # Desmarcar es no mandarla: la que se quedo fuera se despublica
+        self.assertFalse(otra.visible_en_sitio)
+
+    def test_no_se_publican_membresias_de_otro_gimnasio(self):
+        otro_gym = Gym.objects.create(
+            nombre='Ajeno', plan=Plan.objects.get(nombre='Basico')
+        )
+        ajena = Membresia.objects.create(
+            gym=otro_gym, nombre='Ajena', precio=100, duracion_dias=30
+        )
+
+        self.client.post(reverse('core:sitio_membresias'), {'visibles': [str(ajena.pk)]})
+
+        ajena.refresh_from_db()
+        self.assertFalse(ajena.visible_en_sitio)
+
+    def test_la_foto_de_la_membresia_sale_en_la_tarjeta(self):
+        Membresia.objects.create(
+            gym=self.gym, nombre='Anual', precio=6000, duracion_dias=365,
+            visible_en_sitio=True, foto='membresias/anual.jpg',
+        )
+
+        respuesta = self.client.get(reverse('core:landing', args=[self.gym.slug]))
+
+        self.assertContains(respuesta, 'membresias/anual.jpg')
+
+
+# Sin esto los archivos de prueba se quedan en la carpeta media del proyecto.
+@override_settings(MEDIA_ROOT=tempfile.mkdtemp())
+class FotoDeMembresiaTest(BaseGymTest):
+    """La foto es lo que vende el plan en la pagina publica."""
+
+    #: GIF de un pixel: ImageField pide que Pillow pueda abrir el archivo.
+    PIXEL = (
+        b'GIF89a\x01\x00\x01\x00\x80\x00\x00\x00\x00\x00\xff\xff\xff!'
+        b'\xf9\x04\x01\x00\x00\x00\x00,\x00\x00\x00\x00\x01\x00\x01\x00'
+        b'\x00\x02\x02D\x01\x00;'
+    )
+
+    @classmethod
+    def tearDownClass(cls):
+        shutil.rmtree(settings.MEDIA_ROOT, ignore_errors=True)
+        super().tearDownClass()
+
+    def editar(self, **extra):
+        datos = {
+            'nombre': 'Mensual',
+            'precio': '600',
+            'duracion_dias': '30',
+            'descripcion': '',
+        }
+        datos.update(extra)
+        return self.client.post(
+            reverse('clientes:membresia_update', args=[self.membresia.pk]), datos
+        )
+
+    def test_se_sube_al_editar_la_membresia(self):
+        respuesta = self.editar(
+            foto=SimpleUploadedFile('plan.gif', self.PIXEL, content_type='image/gif')
+        )
+        self.assertEqual(respuesta.status_code, 302)
+
+        self.membresia.refresh_from_db()
+        self.assertIn('membresias/', self.membresia.foto.name)
+
+    def test_sigue_siendo_opcional(self):
+        self.assertEqual(self.editar().status_code, 302)
+
+        self.membresia.refresh_from_db()
+        self.assertFalse(self.membresia.foto)
+
 
 class RenovacionTest(BaseGymTest):
     """Renovar antes de tiempo no debe borrar los dias ya pagados."""

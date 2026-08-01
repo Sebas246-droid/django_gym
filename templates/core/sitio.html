@@ -80,6 +80,69 @@
 </div>
 
 <div class="o-hoja o-hoja-angosta">
+  <h2>Precios en la pagina</h2>
+  <p class="texto-tenue mt0">
+    Marca las membresias que quieres que vea el publico con su precio: salen en
+    el apartado <strong>Planes y precios</strong>. La foto se sube al editar
+    cada membresia.
+  </p>
+
+  {% if membresias %}
+    <form method="post" action="{% url 'core:sitio_membresias' %}" class="o-form">
+      {% csrf_token %}
+      <table class="o-lista">
+        <thead>
+          <tr>
+            <th style="width:40px">Ver</th><th>Foto</th><th>Membresia</th>
+            <th class="num">Precio</th><th class="acciones"></th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for m in membresias %}
+            <tr>
+              <td>
+                <input type="checkbox" name="visibles" value="{{ m.pk }}"
+                       id="visible-{{ m.pk }}"
+                       {% if m.visible_en_sitio %}checked{% endif %}>
+              </td>
+              <td>
+                {% if m.foto %}
+                  <img src="{{ m.foto.url }}" alt=""
+                       style="width:56px;height:40px;object-fit:cover;border-radius:4px;display:block">
+                {% else %}
+                  <span class="pill pill-gris">Sin foto</span>
+                {% endif %}
+              </td>
+              <td>
+                <label for="visible-{{ m.pk }}">
+                  <strong>{{ m.nombre }}</strong>
+                  <div class="texto-tenue" style="font-size:12px">{{ m.duracion_dias }} dias</div>
+                </label>
+              </td>
+              <td class="num">{{ m.precio }}</td>
+              <td class="acciones">
+                <a href="{% url 'clientes:membresia_update' m.pk %}" class="btn-enlace">
+                  Editar / subir foto
+                </a>
+              </td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+
+      <div class="o-form-acciones">
+        <button type="submit" class="btn btn-primario">Guardar membresias</button>
+      </div>
+    </form>
+  {% else %}
+    <p class="o-vacio">
+      Aun no hay membresias.
+      <a href="{% url 'clientes:membresia_create' %}">Crea la primera</a> para poder publicarla.
+    </p>
+  {% endif %}
+</div>
+
+<div class="o-hoja o-hoja-angosta">
   <h2>Sucursales en el mapa</h2>
   <p class="texto-tenue mt0">
     Captura latitud y longitud en cada sucursal para que aparezca su mapa en la pagina publica.

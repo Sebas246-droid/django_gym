@@ -15,6 +15,18 @@ class Membresia(GymModel):
     precio = models.DecimalField(max_digits=10, decimal_places=2, default=0)
     duracion_dias = models.PositiveIntegerField(default=30)
     descripcion = models.TextField(blank=True)
+    foto = models.ImageField(
+        upload_to='membresias/',
+        blank=True,
+        null=True,
+        help_text='Se usa en la pagina publica. Sin foto la tarjeta sale solo con texto.',
+    )
+    # La decision de publicar se toma desde el sitio web, no al crear el
+    # catalogo: casi siempre se dan de alta membresias internas (cortesias,
+    # convenios) que no van en la pagina.
+    visible_en_sitio = models.BooleanField(
+        default=False, help_text='Aparece en la pagina publica del gimnasio.'
+    )
 
     class Meta:
         ordering = ['nombre']

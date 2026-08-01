@@ -81,7 +81,7 @@ class ClienteForm(GymModelForm):
 class MembresiaForm(GymModelForm):
     class Meta:
         model = Membresia
-        fields = ['nombre', 'precio', 'duracion_dias', 'descripcion']
+        fields = ['nombre', 'precio', 'duracion_dias', 'descripcion', 'foto']
 
 
 class ClienteMembresiaForm(GymModelForm):

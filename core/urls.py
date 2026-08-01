@@ -25,6 +25,11 @@ urlpatterns = [
         views.SitioImagenDeleteView.as_view(),
         name='sitio_imagen_delete',
     ),
+    path(
+        'sitio/membresias/',
+        views.SitioMembresiasView.as_view(),
+        name='sitio_membresias',
+    ),
 
     # Panel SaaS
     path('planes/', views.PlanListView.as_view(), name='plan_list'),

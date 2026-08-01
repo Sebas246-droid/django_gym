@@ -31,6 +31,7 @@
     <nav>
       <a href="#inicio">Inicio</a>
       {% if imagenes %}<a href="#galeria">Galeria</a>{% endif %}
+      {% if membresias %}<a href="#precios">Precios</a>{% endif %}
       {% if sucursales %}<a href="#sucursales">Sucursales</a>{% endif %}
       <a href="#contacto">Contacto</a>
       <a href="{% url 'accounts:login' %}" class="boton">Acceder</a>
@@ -52,6 +53,9 @@
       {% endif %}
       {% if imagenes %}
         <a href="#galeria" class="boton boton-linea">Ver instalaciones</a>
+      {% endif %}
+      {% if membresias %}
+        <a href="#precios" class="boton boton-linea">Ver precios</a>
       {% endif %}
       {% if sucursales %}
         <a href="#sucursales" class="boton boton-linea">Ver sucursales</a>
@@ -108,6 +112,41 @@
               aria-label="Foto siguiente" hidden>
         <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 6l6 6-6 6"/></svg>
       </button>
+    </div>
+  </div>
+</section>
+{% endif %}
+
+{% if membresias %}
+{# El apartado se titula por el precio, no por la membresia: quien llega a la
+   pagina viene a saber cuanto cuesta, y "membresia" es palabra de mostrador. #}
+<section class="seccion seccion-oscura" id="precios">
+  <div class="envoltura">
+    <h2>Planes y <span>precios</span></h2>
+    <p class="intro">Elige el que va con tu ritmo. Sin inscripcion escondida ni letras chiquitas.</p>
+
+    <div class="membresias">
+      {% for m in membresias %}
+        <article class="membresia">
+          {% if m.foto %}
+            <img src="{{ m.foto.url }}" alt="{{ m.nombre }}" loading="lazy">
+          {% endif %}
+          <div class="cuerpo">
+            <h3>{{ m.nombre }}</h3>
+            <p class="precio">
+              <span class="cifra">{{ m.precio|floatformat:'-2' }}</span>
+              <span class="moneda">{{ gym.moneda }}</span>
+            </p>
+            <p class="vigencia">{{ m.duracion_dias }} dias de acceso</p>
+            {% if m.descripcion %}<p class="detalle">{{ m.descripcion }}</p>{% endif %}
+            {% if gym.whatsapp_url %}
+              <a href="{{ gym.whatsapp_url }}" target="_blank" rel="noopener" class="boton">
+                Quiero este plan
+              </a>
+            {% endif %}
+          </div>
+        </article>
+      {% endfor %}
     </div>
   </div>
 </section>

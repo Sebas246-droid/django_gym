@@ -305,6 +305,51 @@ a { color: var(--acento); text-decoration: none; }
   .carrusel-flecha.der { right: 8px; }
 }
 
+/* --- Planes y precios --------------------------------------------------------- */
+
+.membresias {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  gap: 20px;
+}
+.membresia {
+  background: rgba(255, 255, 255, .03);
+  border: 1px solid rgba(255, 255, 255, .09);
+  border-radius: 16px;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  transition: transform .18s ease, border-color .18s ease;
+}
+.membresia:hover { transform: translateY(-3px); border-color: rgba(var(--acento-rgb), .55); }
+.membresia img { width: 100%; height: 180px; object-fit: cover; }
+/* El cuerpo crece para que el boton quede al ras aunque las tarjetas tengan
+   descripciones de distinto largo. */
+.membresia .cuerpo { padding: 24px; display: flex; flex-direction: column; flex: 1; }
+.membresia h3 {
+  margin: 0 0 10px;
+  font-size: 19px;
+  font-weight: 600;
+  letter-spacing: -.02em;
+  color: #fff;
+}
+.membresia .precio { margin: 0; display: flex; align-items: baseline; gap: 7px; }
+.membresia .precio .cifra {
+  font-size: 34px;
+  font-weight: 800;
+  letter-spacing: -.03em;
+  color: var(--acento);
+  line-height: 1.1;
+}
+.membresia .precio .moneda { font-size: 13px; color: var(--tenue); font-weight: 500; }
+.membresia .vigencia { margin: 2px 0 0; font-size: 13.5px; color: var(--tenue); }
+.membresia .detalle { margin: 14px 0 0; font-size: 14px; color: var(--tenue); }
+/* El hueco lo pone el ultimo parrafo, porque el margen del boton es auto: eso
+   lo empuja al fondo y deja todos los botones de la fila a la misma altura
+   aunque las descripciones midan distinto. */
+.membresia .cuerpo > p:last-of-type { margin-bottom: 22px; }
+.membresia .boton { margin-top: auto; align-self: flex-start; }
+
 /* --- Sucursales ---------------------------------------------------------- */
 
 .sucursales {

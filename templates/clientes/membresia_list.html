@@ -14,24 +14,39 @@
   <table class="o-lista">
     <thead>
       <tr>
-        <th>Nombre</th><th class="num">Precio</th><th class="num">Duracion</th>
-        <th>Descripcion</th><th class="acciones"></th>
+        <th>Foto</th><th>Nombre</th><th class="num">Precio</th><th class="num">Duracion</th>
+        <th>Descripcion</th><th>Sitio web</th><th class="acciones"></th>
       </tr>
     </thead>
     <tbody>
       {% for m in membresias %}
         <tr>
+          <td>
+            {% if m.foto %}
+              <img src="{{ m.foto.url }}" alt=""
+                   style="width:56px;height:40px;object-fit:cover;border-radius:4px;display:block">
+            {% else %}
+              <span class="texto-tenue">-</span>
+            {% endif %}
+          </td>
           <td><strong>{{ m.nombre }}</strong></td>
           <td class="num">{{ m.precio }}</td>
           <td class="num">{{ m.duracion_dias }} dias</td>
           <td class="texto-tenue">{{ m.descripcion|default:'-'|truncatewords:12 }}</td>
+          <td>
+            {% if m.visible_en_sitio %}
+              <span class="pill pill-ok">Publicada</span>
+            {% else %}
+              <span class="pill pill-gris">Oculta</span>
+            {% endif %}
+          </td>
           <td class="acciones">
             <a href="{% url 'clientes:membresia_update' m.pk %}" class="btn-enlace">Editar</a>
             <a href="{% url 'clientes:membresia_delete' m.pk %}" class="btn-enlace">Baja</a>
           </td>
         </tr>
       {% empty %}
-        <tr><td colspan="5" class="vacio">Sin membresias. Crea la primera para poder vender.</td></tr>
+        <tr><td colspan="7" class="vacio">Sin membresias. Crea la primera para poder vender.</td></tr>
       {% endfor %}
     </tbody>
   </table>

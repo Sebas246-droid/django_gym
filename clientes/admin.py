@@ -5,8 +5,8 @@ from clientes.models import Asistencia, Cliente, ClienteMembresia, Membresia
 
 @admin.register(Membresia)
 class MembresiaAdmin(admin.ModelAdmin):
-    list_display = ['nombre', 'gym', 'precio', 'duracion_dias', 'activo']
-    list_filter = ['gym', 'activo']
+    list_display = ['nombre', 'gym', 'precio', 'duracion_dias', 'visible_en_sitio', 'activo']
+    list_filter = ['gym', 'visible_en_sitio', 'activo']
 
 
 @admin.register(Cliente)

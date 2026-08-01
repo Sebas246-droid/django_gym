@@ -12,7 +12,7 @@ from django.views.generic import (
     View,
 )
 
-from clientes.models import Asistencia, Cliente, ClienteMembresia
+from clientes.models import Asistencia, Cliente, ClienteMembresia, Membresia
 from core.forms import PALETAS, GymForm, GymImagenForm, GymSitioForm, PlanForm, SucursalForm
 from core.mixins import (
     AdminRequiredMixin,
@@ -42,6 +42,9 @@ class LandingView(DetailView):
         gym = self.object
         ctx['imagenes'] = gym.imagenes.filter(activo=True)
         ctx['sucursales'] = gym.sucursales.filter(activo=True)
+        ctx['membresias'] = Membresia.objects.filter(
+            gym=gym, activo=True, visible_en_sitio=True
+        ).order_by('precio', 'nombre')
         ctx['clientes_total'] = gym.clientes.filter(activo=True).count()
         ctx['entrenamientos_total'] = gym.entrenamiento_set.filter(activo=True).count()
         ctx['coaches_total'] = gym.users.filter(
@@ -384,6 +387,9 @@ class SitioUpdateView(AdminRequiredMixin, GymRequiredMixin, UpdateView):
         ctx['paletas'] = PALETAS
         ctx['imagenes'] = self.gym.imagenes.filter(activo=True)
         ctx['imagen_form'] = GymImagenForm(gym=self.gym)
+        ctx['membresias'] = Membresia.objects.filter(
+            gym=self.gym, activo=True
+        ).order_by('precio', 'nombre')
         ctx['menu'] = 'sitio'
         return ctx
 
@@ -412,4 +418,24 @@ class SitioImagenDeleteView(AdminRequiredMixin, GymRequiredMixin, View):
         imagen = get_object_or_404(GymImagen, pk=pk, gym=request.user.gym)
         imagen.soft_delete()
         messages.success(request, 'Imagen quitada del sitio.')
+        return redirect('core:sitio')
+
+
+class SitioMembresiasView(AdminRequiredMixin, GymRequiredMixin, View):
+    """
+    Elige que membresias del catalogo se publican como precios en la pagina.
+
+    Llega la lista completa de marcadas: lo que no viene en el POST se apaga.
+    Asi una casilla que se desmarca se guarda igual que una que se marca, sin
+    tener que mandar el estado anterior.
+    """
+
+    def post(self, request):
+        del_gym = Membresia.objects.filter(gym=request.user.gym, activo=True)
+        marcadas = {int(pk) for pk in request.POST.getlist('visibles') if pk.isdigit()}
+
+        del_gym.filter(pk__in=marcadas).update(visible_en_sitio=True)
+        del_gym.exclude(pk__in=marcadas).update(visible_en_sitio=False)
+
+        messages.success(request, 'Membresias del sitio actualizadas.')
         return redirect('core:sitio')
