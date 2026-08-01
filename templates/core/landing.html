@@ -118,8 +118,10 @@
 {% endif %}
 
 {% if membresias %}
-{# El apartado se titula por el precio, no por la membresia: quien llega a la
-   pagina viene a saber cuanto cuesta, y "membresia" es palabra de mostrador. #}
+{% comment %}
+El apartado se titula por el precio, no por la membresia: quien llega a la
+pagina viene a saber cuanto cuesta, y "membresia" es palabra de mostrador.
+{% endcomment %}
 <section class="seccion seccion-oscura" id="precios">
   <div class="envoltura">
     <h2>Planes y <span>precios</span></h2>
@@ -130,6 +132,8 @@
         <article class="membresia">
           {% if m.foto %}
             <img src="{{ m.foto.url }}" alt="{{ m.nombre }}" loading="lazy">
+          {% else %}
+            <div class="sin-foto" aria-hidden="true">{{ m.nombre|first|upper }}</div>
           {% endif %}
           <div class="cuerpo">
             <h3>{{ m.nombre }}</h3>

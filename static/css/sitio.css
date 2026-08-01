@@ -307,12 +307,21 @@ a { color: var(--acento); text-decoration: none; }
 
 /* --- Planes y precios --------------------------------------------------------- */
 
+/* Flex y no grid porque lo que hace falta es un tope de ancho: sin el, un
+   gimnasio con una o dos membresias sacaba tarjetas de ancho completo y la
+   foto se estiraba en una franja larguisima. Con el tope, tres llenan la fila
+   justa y una o dos quedan del mismo tamano, centradas.
+   (Con grid no sale: auto-fit cuenta las columnas por el maximo del minmax,
+   asi que tres tarjetas se partian en 2 + 1.) */
 .membresias {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
   gap: 20px;
 }
 .membresia {
+  flex: 1 1 280px;
+  max-width: 380px;
   background: rgba(255, 255, 255, .03);
   border: 1px solid rgba(255, 255, 255, .09);
   border-radius: 16px;
@@ -322,7 +331,23 @@ a { color: var(--acento); text-decoration: none; }
   transition: transform .18s ease, border-color .18s ease;
 }
 .membresia:hover { transform: translateY(-3px); border-color: rgba(var(--acento-rgb), .55); }
-.membresia img { width: 100%; height: 180px; object-fit: cover; }
+/* Proporcion fija en vez de alto fijo: la foto se recorta igual de bien suba
+   la que suba el gimnasio, y no queda de franja. */
+.membresia img,
+.membresia .sin-foto { width: 100%; aspect-ratio: 3 / 2; object-fit: cover; }
+/* La tarjeta sin foto conserva el mismo bloque de arriba, si no la fila queda
+   desalineada: una tarjeta empezando con imagen y la de al lado con texto. */
+.membresia .sin-foto {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background:
+    linear-gradient(140deg, rgba(var(--acento-rgb), .22), rgba(255, 255, 255, .02));
+  color: rgba(255, 255, 255, .5);
+  font-size: 54px;
+  font-weight: 800;
+  letter-spacing: -.04em;
+}
 /* El cuerpo crece para que el boton quede al ras aunque las tarjetas tengan
    descripciones de distinto largo. */
 .membresia .cuerpo { padding: 24px; display: flex; flex-direction: column; flex: 1; }

@@ -447,6 +447,16 @@ class SitioPublicoTest(BaseGymTest):
         ajena.refresh_from_db()
         self.assertFalse(ajena.visible_en_sitio)
 
+    def test_no_se_escapan_comentarios_de_plantilla(self):
+        """
+        Un {# ... #} de varias lineas no es comentario para Django: lo imprime
+        tal cual en la pagina, a la vista de cualquiera que entre.
+        """
+        respuesta = self.client.get(reverse('core:landing', args=[self.gym.slug]))
+
+        self.assertNotContains(respuesta, '{#')
+        self.assertNotContains(respuesta, '#}')
+
     def test_la_foto_de_la_membresia_sale_en_la_tarjeta(self):
         Membresia.objects.create(
             gym=self.gym, nombre='Anual', precio=6000, duracion_dias=365,
