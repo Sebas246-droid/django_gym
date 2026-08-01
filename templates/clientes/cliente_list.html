@@ -61,14 +61,16 @@
             {% endwith %}
           </td>
           {% comment %}
-          Vender es la accion que deja dinero: va como boton, no como un enlace
-          mas entre otros dos.
+          Solo dos: vender, que es lo que deja dinero, y abrir la ficha. Editar
+          y dar de baja se hacen dentro, que es donde se ve a quien le pegan.
+          "Ficha" va escrito porque el nombre en azul no basta: nadie adivina
+          que se puede hacer clic si nada lo dice.
           {% endcomment %}
           <td class="acciones">
             <a href="{% url 'clientes:clientemembresia_create' %}?cliente={{ cliente.pk }}"
                class="btn btn-mini">{% if cliente.esta_al_corriente %}Renovar{% else %}Vender{% endif %}</a>
-            <a href="{% url 'clientes:cliente_update' cliente.pk %}" class="btn-enlace">Editar</a>
-            <a href="{% url 'clientes:cliente_delete' cliente.pk %}" class="btn-enlace">Baja</a>
+            <a href="{% url 'clientes:cliente_detail' cliente.pk %}"
+               class="btn-enlace enlace-ficha">Ficha &rsaquo;</a>
           </td>
         </tr>
       {% empty %}

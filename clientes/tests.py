@@ -752,3 +752,78 @@ class FiltrosDeClientesTest(BaseGymTest):
 
     def test_un_filtro_inventado_no_recorta_la_lista(self):
         self.assertEqual(len(self.filtrar('lo-que-sea')), 4)
+
+
+class LlegarALaFichaTest(BaseGymTest):
+    """
+    El nombre en azul era la unica puerta al perfil, y nada lo anunciaba.
+    """
+
+    def setUp(self):
+        super().setUp()
+        self.cliente = self.crear_cliente('Ana Torres')
+        self.lista = self.client.get(reverse('clientes:cliente_list')).content.decode()
+        self.ficha_url = reverse('clientes:cliente_detail', args=[self.cliente.pk])
+
+    def test_la_lista_dice_que_hay_una_ficha(self):
+        self.assertIn('Ficha', self.lista)
+        self.assertIn(self.ficha_url, self.lista)
+
+    def test_la_fila_no_se_llena_de_acciones(self):
+        """Editar y dar de baja se hacen dentro, donde se ve a quien le pegan."""
+        self.assertNotIn(
+            reverse('clientes:cliente_update', args=[self.cliente.pk]), self.lista
+        )
+        self.assertNotIn(
+            reverse('clientes:cliente_delete', args=[self.cliente.pk]), self.lista
+        )
+
+    def test_vender_sigue_a_la_mano_desde_la_fila(self):
+        self.assertIn(
+            f"{reverse('clientes:clientemembresia_create')}?cliente={self.cliente.pk}",
+            self.lista,
+        )
+
+
+class AccionesDeLaFichaTest(BaseGymTest):
+    """Cinco botones en fila no dejaban ver cual importa."""
+
+    def setUp(self):
+        super().setUp()
+        self.cliente = self.crear_cliente('Ana Torres')
+        self.ficha = self.client.get(
+            reverse('clientes:cliente_detail', args=[self.cliente.pk])
+        ).content.decode()
+
+    def test_solo_una_accion_principal(self):
+        self.assertEqual(self.ficha.count('btn-primario'), 1)
+
+    def test_y_es_la_que_deja_dinero(self):
+        self.assertIn('Vender membresia', self.ficha)
+
+    def test_dice_renovar_cuando_ya_tiene(self):
+        self.vender_membresia(self.cliente, timezone.localdate())
+
+        ficha = self.client.get(
+            reverse('clientes:cliente_detail', args=[self.cliente.pk])
+        ).content.decode()
+
+        self.assertIn('Renovar membresia', ficha)
+
+    def test_lo_demas_sigue_estando(self):
+        for url in (
+            reverse('clientes:cliente_update', args=[self.cliente.pk]),
+            reverse('clientes:cliente_credencial', args=[self.cliente.pk]),
+            reverse('clientes:cliente_delete', args=[self.cliente.pk]),
+            reverse('clientes:asistencia_registrar', args=[self.cliente.pk]),
+            reverse('bot:codigo_vinculacion', args=[self.cliente.pk]),
+        ):
+            with self.subTest(url=url):
+                self.assertIn(url, self.ficha)
+
+    def test_dar_de_baja_desde_la_ficha_funciona(self):
+        """Se movio de la lista al menu: la baja tiene que seguir corriendo."""
+        self.client.post(reverse('clientes:cliente_delete', args=[self.cliente.pk]))
+
+        self.cliente.refresh_from_db()
+        self.assertFalse(self.cliente.activo)

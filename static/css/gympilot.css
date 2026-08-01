@@ -288,14 +288,25 @@ button { font-family: inherit; }
   border-radius: var(--r);
   box-shadow: var(--sombra-lg);
 }
-.o-menu-lista a {
+/* Hay acciones que son POST: el boton del formulario se ve igual que un enlace */
+.o-menu-lista a,
+.o-menu-lista button {
   display: block;
+  width: 100%;
   padding: 8px 11px;
+  border: 0;
+  background: none;
   border-radius: var(--r-sm);
+  font-family: inherit;
   font-size: 13.5px;
+  text-align: left;
   color: var(--tinta-2);
+  cursor: pointer;
 }
-.o-menu-lista a:hover { background: #F3F3F7; color: var(--tinta); }
+.o-menu-lista a:hover,
+.o-menu-lista button:hover { background: #F3F3F7; color: var(--tinta); }
+.o-menu-lista .peligro { color: var(--alerta); }
+.o-menu-lista .peligro:hover { background: var(--alerta-fondo); color: var(--alerta); }
 
 .btn-grande { padding: 11px 20px; font-size: 15px; border-radius: var(--r); }
 
@@ -1335,3 +1346,26 @@ table.o-lista .inactiva td { opacity: .5; }
   align-items: start;
 }
 @media (max-width: 900px) { .rejilla-detalle { grid-template-columns: 1fr; } }
+
+/* Ficha del socio */
+.foto-socio {
+  width: 100%;
+  max-width: 200px;
+  aspect-ratio: 1;
+  object-fit: cover;
+  border-radius: var(--r);
+  margin-bottom: 6px;
+}
+/* Diez renglones seguidos se leen como un muro: van en bloques con titulo */
+.o-hoja > h3:first-child, .o-hoja > .foto-socio + h3 { margin-top: 0; }
+table.o-datos th { width: 40%; font-weight: 500; color: var(--tinta-3); }
+table.o-datos td, table.o-datos th { padding: 7px 0; }
+table.o-datos tbody tr:hover { background: none; }
+
+/* El nombre en azul no anuncia que abre nada: esto si, y por eso se lee */
+.enlace-ficha { color: var(--tinta-2); font-weight: 550; white-space: nowrap; }
+table.o-lista tbody tr:hover .enlace-ficha { color: var(--acento); }
+
+/* Metodo y quien cobro: dos datos cortos que no deben partirse en tres lineas */
+.celda-cobro { white-space: nowrap; }
+.celda-cobro small { display: block; font-size: 11.5px; }

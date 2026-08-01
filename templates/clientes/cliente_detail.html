@@ -6,30 +6,47 @@
 {% endblock %}
 {% block encabezado %}{{ cliente.nombre }}{% endblock %}
 
+{% comment %}
+Cinco botones en fila no dejaban ver cual importa. Arriba queda solo el que
+deja dinero; lo demas se usa de vez en cuando y cabe en el menu.
+{% endcomment %}
 {% block acciones %}
-  <a href="{% url 'clientes:cliente_update' cliente.pk %}" class="btn">Editar</a>
-  <a href="{% url 'clientes:cliente_credencial' cliente.pk %}" class="btn"
-     target="_blank">Credencial</a>
-  <form method="post" action="{% url 'bot:codigo_vinculacion' cliente.pk %}">
-    {% csrf_token %}
-    <button type="submit" class="btn btn-telegram">Codigo de Telegram</button>
-  </form>
-  <form method="post" action="{% url 'clientes:asistencia_registrar' cliente.pk %}">
-    {% csrf_token %}
-    <input type="hidden" name="tipo" value="entrada">
-    <button type="submit" class="btn">Registrar entrada</button>
-  </form>
+  <details class="o-menu">
+    <summary class="btn">Mas</summary>
+    <div class="o-menu-lista">
+      <a href="{% url 'clientes:cliente_update' cliente.pk %}">Editar datos</a>
+      <a href="{% url 'clientes:cliente_credencial' cliente.pk %}"
+         target="_blank">Ver credencial</a>
+      <form method="post" action="{% url 'clientes:asistencia_registrar' cliente.pk %}">
+        {% csrf_token %}
+        <input type="hidden" name="tipo" value="entrada">
+        <button type="submit">Registrar entrada</button>
+      </form>
+      <form method="post" action="{% url 'bot:codigo_vinculacion' cliente.pk %}">
+        {% csrf_token %}
+        <button type="submit">Codigo de Telegram</button>
+      </form>
+      <a href="{% url 'clientes:cliente_delete' cliente.pk %}"
+         class="peligro">Dar de baja</a>
+    </div>
+  </details>
   <a href="{% url 'clientes:clientemembresia_create' %}?cliente={{ cliente.pk }}"
-     class="btn btn-primario">Vender membresia</a>
+     class="btn btn-primario">
+    {% if cliente.esta_al_corriente %}Renovar membresia{% else %}Vender membresia{% endif %}
+  </a>
 {% endblock %}
 
 {% block acciones_derecha %}
   <span class="numero-socio" style="font-size:15px">{{ cliente.numero_usuario }}</span>
-  {% if cliente.esta_al_corriente %}
-    <span class="pill pill-ok">Membresia vigente</span>
-  {% else %}
-    <span class="pill pill-alerta">Sin membresia vigente</span>
-  {% endif %}
+  {% with vigente=cliente.membresia_vigente %}
+    {% if not vigente %}
+      <span class="pill pill-alerta">Sin membresia</span>
+    {% elif cliente.dias_restantes <= 7 %}
+      <span class="pill pill-aviso">Vence en {{ cliente.dias_restantes }} d</span>
+    {% else %}
+      <span class="pill pill-ok">Vigente al {{ vigente.fin|date:'d/m/Y' }}</span>
+    {% endif %}
+  {% endwith %}
 {% endblock %}
 
 {% block content %}
@@ -37,18 +54,32 @@
 <div class="rejilla-detalle">
 
   <div class="o-hoja">
-    <h2>Datos</h2>
     {% if cliente.foto %}
-      <img src="{{ cliente.foto.url }}" alt=""
-           style="width:100%;max-width:220px;border-radius:6px;margin-bottom:14px">
+      <img src="{{ cliente.foto.url }}" alt="" class="foto-socio">
     {% endif %}
-    <table class="o-lista">
+
+    <h3>Contacto</h3>
+    <table class="o-lista o-datos">
       <tbody>
-        <tr><th>Numero</th><td><span class="numero-socio">{{ cliente.numero_usuario }}</span></td></tr>
         <tr><th>Telefono</th><td>{{ cliente.telefono|default:'-' }}</td></tr>
         <tr><th>Correo</th><td>{{ cliente.correo|default:'-' }}</td></tr>
+        <tr>
+          <th>Emergencia</th>
+          <td>
+            {{ cliente.nombre_contacto_emergencia|default:'-' }}
+            {% if cliente.telefono_contacto_emergencia %}
+              <br><span class="texto-tenue">{{ cliente.telefono_contacto_emergencia }}</span>
+            {% endif %}
+          </td>
+        </tr>
+      </tbody>
+    </table>
+
+    <h3>Datos personales</h3>
+    <table class="o-lista o-datos">
+      <tbody>
         <tr><th>Sexo</th><td>{{ cliente.get_sexo_display|default:'-' }}</td></tr>
-        <tr><th>Nacimiento</th><td>{{ cliente.fecha_nacimiento|default:'-' }}</td></tr>
+        <tr><th>Nacimiento</th><td>{{ cliente.fecha_nacimiento|date:'d/m/Y'|default:'-' }}</td></tr>
         <tr>
           <th>Estatura</th>
           <td>{% if cliente.estatura_cm %}{{ cliente.estatura_cm }} cm{% else %}-{% endif %}</td>
@@ -62,18 +93,8 @@
             {% else %}-{% endif %}
           </td>
         </tr>
-        <tr>
-          <th>Actividad</th>
-          <td>{{ cliente.get_nivel_actividad_display|default:'-' }}</td>
-        </tr>
+        <tr><th>Actividad</th><td>{{ cliente.get_nivel_actividad_display|default:'-' }}</td></tr>
         <tr><th>Sucursal</th><td>{{ cliente.sucursal }}</td></tr>
-        <tr>
-          <th>Emergencia</th>
-          <td>
-            {{ cliente.nombre_contacto_emergencia|default:'-' }}<br>
-            <span class="texto-tenue">{{ cliente.telefono_contacto_emergencia }}</span>
-          </td>
-        </tr>
       </tbody>
     </table>
   </div>
@@ -81,20 +102,24 @@
   <div>
     <div class="o-hoja">
       <h2>Historial de membresias</h2>
+      {% comment %}
+      Inicio y fin son un solo dato, y quien cobro solo importa junto al como.
+      Ocho columnas apretadas se leian peor que cinco.
+      {% endcomment %}
       <table class="o-lista">
         <thead>
           <tr>
-            <th>Membresia</th><th>Inicio</th><th>Fin</th><th>Estado</th>
-            <th class="num">Total</th><th>Pago</th><th>Cobro</th>
-            <th class="acciones"></th>
+            <th>Membresia</th><th>Vigencia</th><th>Estado</th>
+            <th class="num">Total</th><th>Cobro</th><th class="acciones"></th>
           </tr>
         </thead>
         <tbody>
           {% for cm in membresias %}
             <tr>
               <td><strong>{{ cm.membresia.nombre }}</strong></td>
-              <td>{{ cm.inicio|date:'d/m/Y' }}</td>
-              <td>{{ cm.fin|date:'d/m/Y' }}</td>
+              <td class="texto-tenue">
+                {{ cm.inicio|date:'d/m/Y' }} &ndash; {{ cm.fin|date:'d/m/Y' }}
+              </td>
               <td>
                 {% if cm.estado == 'vigente' %}
                   <span class="pill pill-ok">Vigente</span>
@@ -105,8 +130,10 @@
                 {% endif %}
               </td>
               <td class="num">{{ cm.total }}</td>
-              <td class="texto-tenue">{{ cm.get_metodo_pago_display }}</td>
-              <td class="texto-tenue">{{ cm.usuario|default:'-' }}</td>
+              <td class="texto-tenue celda-cobro">
+                {{ cm.get_metodo_pago_display }}
+                {% if cm.usuario %}<small>{{ cm.usuario }}</small>{% endif %}
+              </td>
               <td class="acciones">
                 {% if cm.estado != 'cancelada' %}
                   <a href="{% url 'clientes:clientemembresia_update' cm.pk %}"
@@ -122,7 +149,9 @@
               </td>
             </tr>
           {% empty %}
-            <tr><td colspan="8" class="vacio">Sin membresias.</td></tr>
+            <tr><td colspan="6" class="vacio">
+              Sin membresias todavia.
+            </td></tr>
           {% endfor %}
         </tbody>
       </table>
