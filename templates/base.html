@@ -46,23 +46,29 @@
           {% include 'core/_icono.html' with nombre='acceso' %} Acceso
         </a>
 
-        <div class="nav-grupo">Operacion</div>
+        {% comment %}
+        Los grupos separan lo de todos los dias de lo que se toca de vez en
+        cuando. Recepcion vive en Mostrador y casi nunca baja de ahi.
+        {% endcomment %}
+        <div class="nav-grupo">Mostrador</div>
         <a href="{% url 'clientes:cliente_list' %}" class="{% if menu == 'clientes' %}activo{% endif %}">
           {% include 'core/_icono.html' with nombre='clientes' %} Clientes
         </a>
         {% comment %}
-        Lleva a las ventas, no al catalogo: vender es lo de todos los dias y el
-        catalogo se configura una vez. Se llega a el desde ahi.
+        El historial de ventas no es un modulo aparte: es la otra pestana de la
+        caja. Quien lo busca viene de cobrar.
         {% endcomment %}
-        <a href="{% url 'clientes:clientemembresia_list' %}"
-           class="{% if menu == 'membresias' %}activo{% endif %}">
-          {% include 'core/_icono.html' with nombre='membresias' %} Membresias
-        </a>
         <a href="{% url 'ventas:pos' %}" class="{% if menu == 'pos' %}activo{% endif %}">
           {% include 'core/_icono.html' with nombre='pos' %} Punto de venta
         </a>
-        <a href="{% url 'ventas:venta_list' %}" class="{% if menu == 'ventas' %}activo{% endif %}">
-          {% include 'core/_icono.html' with nombre='ventas' %} Ventas
+        <a href="{% url 'clientes:asistencia_list' %}" class="{% if menu == 'asistencias' %}activo{% endif %}">
+          {% include 'core/_icono.html' with nombre='acceso' %} Asistencias
+        </a>
+
+        <div class="nav-grupo">Catalogo</div>
+        <a href="{% url 'clientes:membresia_list' %}"
+           class="{% if menu == 'membresias' %}activo{% endif %}">
+          {% include 'core/_icono.html' with nombre='membresias' %} Membresias
         </a>
         <a href="{% url 'inventario:producto_list' %}" class="{% if menu == 'inventario' %}activo{% endif %}">
           {% include 'core/_icono.html' with nombre='inventario' %} Inventario

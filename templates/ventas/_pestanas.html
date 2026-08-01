@@ -1,0 +1,12 @@
+{% comment %}
+Cobrar y revisar lo cobrado son el mismo modulo visto de dos maneras, no dos
+entradas del menu.
+{% endcomment %}
+<nav class="pestanas">
+  <a href="{% url 'ventas:pos' %}" class="{% if pestana == 'caja' %}activa{% endif %}">
+    Caja
+  </a>
+  <a href="{% url 'ventas:venta_list' %}" class="{% if pestana == 'ventas' %}activa{% endif %}">
+    Ventas
+  </a>
+</nav>

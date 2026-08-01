@@ -9,11 +9,9 @@
   <span class="pill pill-gris">{{ sucursal }}</span>
 {% endblock %}
 
-{% block acciones %}
-  <a href="{% url 'ventas:venta_list' %}" class="btn">Historial</a>
-{% endblock %}
-
 {% block content %}
+{% include 'ventas/_pestanas.html' with pestana='caja' %}
+
 <div class="pos">
 
   <section class="pos-catalogo">

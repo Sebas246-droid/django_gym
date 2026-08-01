@@ -282,3 +282,105 @@ class FlujoCompletoTest(TestCase):
             reverse('core:sucursal_create'), {'nombre': 'Norte', 'direccion': ''}
         )
         self.assertEqual(self.gym.sucursales.filter(activo=True).count(), 1)
+
+
+class TodasLasPantallasAbrenTest(TestCase):
+    """
+    Recorre el menu entero y cada pantalla que cuelga de el.
+
+    Un enlace a una url que ya no existe no lo cachan ni las pruebas de cada
+    modulo ni manage.py check: revienta al renderizar. Ya paso una vez, con el
+    tablero enlazando a la pantalla de compras despues de quitarla.
+    """
+
+    #: Las que no llevan argumentos. Las de detalle se arman en la prueba.
+    PANTALLAS = [
+        'core:dashboard',
+        'core:sucursal_list', 'core:sucursal_create',
+        'core:sitio', 'core:gym_list', 'core:plan_list',
+        'accounts:usuario_list', 'accounts:usuario_create',
+        'clientes:checkin',
+        'clientes:cliente_list', 'clientes:cliente_create',
+        'clientes:asistencia_list',
+        'clientes:membresia_list', 'clientes:membresia_create',
+        'clientes:clientemembresia_list', 'clientes:clientemembresia_create',
+        'entrenamiento:list', 'entrenamiento:create',
+        'inventario:producto_list', 'inventario:producto_create',
+        'inventario:categoria_list', 'inventario:categoria_create',
+        'inventario:movimiento_list', 'inventario:movimiento_create',
+        'ventas:pos', 'ventas:venta_list',
+        'bot:configuracion',
+    ]
+
+    @classmethod
+    def setUpTestData(cls):
+        call_command('init_saas')
+        cls.gym = Gym.objects.create(
+            nombre='Iron House', plan=Plan.objects.get(nombre='Pro')
+        )
+        cls.sucursal = Sucursal.objects.get(gym=cls.gym, nombre='Principal')
+        cls.admin = User.objects.create_user(
+            username='jefe', password='pass12345',
+            gym=cls.gym, sucursal=cls.sucursal, is_superuser=True,
+        )
+        cls.admin.groups.add(Group.objects.get(name=ADMINISTRADOR))
+
+    def setUp(self):
+        self.client.force_login(self.admin)
+
+    def test_ninguna_truena(self):
+        for nombre in self.PANTALLAS:
+            with self.subTest(pantalla=nombre):
+                self.assertEqual(self.client.get(reverse(nombre)).status_code, 200)
+
+    def test_tambien_con_datos_dentro(self):
+        """Vacias pasan de panzazo: las filas tienen sus propios enlaces."""
+        cliente = Cliente.objects.create(
+            gym=self.gym, sucursal=self.sucursal, nombre='Socio'
+        )
+        membresia = Membresia.objects.create(
+            gym=self.gym, nombre='Mensual', precio=600, duracion_dias=30
+        )
+        ClienteMembresia.objects.create(
+            gym=self.gym, cliente=cliente, membresia=membresia,
+            inicio=timezone.localdate(), precio=600, usuario=self.admin,
+        )
+        categoria = CategoriaProducto.objects.create(gym=self.gym, nombre='Bebidas')
+        producto = Producto.objects.create(
+            gym=self.gym, categoria=categoria, codigo='P1',
+            nombre='Agua', precio_compra=5, precio_venta=15,
+        )
+        InventarioSucursal.objects.create(
+            producto=producto, sucursal=self.sucursal, stock=5
+        )
+        venta = Venta.objects.create(
+            gym=self.gym, sucursal=self.sucursal, usuario=self.admin
+        )
+        VentaDetalle.objects.create(
+            venta=venta, producto=producto, cantidad=1, precio=15
+        )
+        venta.confirmar()
+
+        for nombre in self.PANTALLAS:
+            with self.subTest(pantalla=nombre):
+                self.assertEqual(self.client.get(reverse(nombre)).status_code, 200)
+
+        for nombre, pk in [
+            ('clientes:cliente_detail', cliente.pk),
+            ('clientes:cliente_credencial', cliente.pk),
+            ('ventas:venta_detail', venta.pk),
+        ]:
+            with self.subTest(pantalla=nombre):
+                self.assertEqual(
+                    self.client.get(reverse(nombre, args=[pk])).status_code, 200
+                )
+
+    def test_el_menu_no_ofrece_ventas_como_modulo_aparte(self):
+        cuerpo = self.client.get(reverse('core:dashboard')).content.decode()
+        self.assertIn('Punto de venta', cuerpo)
+        self.assertIn('>Mostrador<', cuerpo)
+        self.assertIn('>Catalogo<', cuerpo)
+
+    def test_el_punto_de_venta_queda_marcado_al_ver_el_historial(self):
+        respuesta = self.client.get(reverse('ventas:venta_list'))
+        self.assertEqual(respuesta.context['menu'], 'pos')

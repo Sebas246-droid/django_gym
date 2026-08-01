@@ -1,26 +1,68 @@
 {% extends 'base.html' %}
+{% load humanize %}
 
 {% block title %}Ventas - GymPilot{% endblock %}
-{% block migas %}/ <span>Ventas</span>{% endblock %}
-{% block encabezado %}Ventas{% endblock %}
+{% block migas %}
+  / <a href="{% url 'ventas:pos' %}">Punto de venta</a> / <span>Ventas</span>
+{% endblock %}
+{% block encabezado %}Punto de venta{% endblock %}
 
-{% comment %}
-Aqui no se cobra: esto es el historial de lo ya cobrado. Quien viene a vender
-va al punto de venta, y quien viene a vender una membresia a su pantalla.
-{% endcomment %}
+{% block acciones_derecha %}
+  <span class="pill pill-gris">{{ sucursal_actual }}</span>
+{% endblock %}
+
 {% block acciones %}
-  <a href="{% url 'ventas:pos' %}" class="btn btn-primario">Punto de venta</a>
-  <a href="{% url 'clientes:clientemembresia_create' %}" class="btn">Vender membresia</a>
-  <a href="{% url 'clientes:clientemembresia_list' %}" class="btn">Ventas de membresia</a>
+  <a href="{% url 'ventas:pos' %}" class="btn btn-primario">Cobrar</a>
 {% endblock %}
 
 {% block content %}
+{% include 'ventas/_pestanas.html' with pestana='ventas' %}
+
+{% comment %}
+Quien abre esto casi siempre cierra turno: primero el corte, luego los tickets.
+{% endcomment %}
+<section class="corte">
+  <div class="corte-dia">
+    <a href="?dia={{ dia_anterior|date:'Y-m-d' }}" class="btn btn-mini"
+       title="Dia anterior">&larr;</a>
+    <div class="corte-fecha">
+      <strong>{% if es_hoy %}Hoy{% else %}{{ dia|date:'l'|capfirst }}{% endif %}</strong>
+      <span>{{ dia|date:'j \d\e F \d\e Y' }}</span>
+    </div>
+    {% if dia_siguiente %}
+      <a href="?dia={{ dia_siguiente|date:'Y-m-d' }}" class="btn btn-mini"
+         title="Dia siguiente">&rarr;</a>
+    {% else %}
+      {% comment %}Manana no hay nada cobrado, pero el hueco mantiene la fila derecha.{% endcomment %}
+      <span class="btn btn-mini inerte" aria-hidden="true">&rarr;</span>
+    {% endif %}
+    <form method="get" class="corte-salto">
+      <input type="date" name="dia" value="{{ dia|date:'Y-m-d' }}"
+             max="{{ hoy|date:'Y-m-d' }}" onchange="this.form.submit()">
+    </form>
+  </div>
+
+  <div class="corte-cifras">
+    <div class="corte-total">
+      <span class="etiqueta">Cobrado</span>
+      <strong>{{ total_dia|floatformat:0|intcomma }}</strong>
+      <span class="etiqueta">{{ tickets }} ticket{{ tickets|pluralize }}</span>
+    </div>
+    {% for etiqueta, importe in metodos %}
+      <div class="corte-metodo">
+        <span class="etiqueta">{{ etiqueta }}</span>
+        <strong>{{ importe|floatformat:0|intcomma }}</strong>
+      </div>
+    {% endfor %}
+  </div>
+</section>
+
 <div class="o-tabla-caja">
   <table class="o-lista">
     <thead>
       <tr>
-        <th>#</th><th>Fecha</th><th>Cliente</th><th>Sucursal</th>
-        <th class="num">Subtotal</th><th class="num">Desc.</th><th class="num">Total</th>
+        <th>#</th><th>Hora</th><th>Cliente</th><th>Cobro</th>
+        <th class="num">Desc.</th><th class="num">Total</th>
         <th>Pago</th><th class="acciones"></th>
       </tr>
     </thead>
@@ -28,10 +70,9 @@ va al punto de venta, y quien viene a vender una membresia a su pantalla.
       {% for v in ventas %}
         <tr>
           <td><a href="{% url 'ventas:venta_detail' v.pk %}" class="enlace-detalle">{{ v.pk }}</a></td>
-          <td class="texto-tenue">{{ v.fecha|date:'d/m/Y H:i' }}</td>
+          <td class="texto-tenue hora">{{ v.fecha|date:'H:i' }}</td>
           <td>{{ v.cliente|default:'Mostrador' }}</td>
-          <td class="texto-tenue">{{ v.sucursal }}</td>
-          <td class="num">{{ v.subtotal }}</td>
+          <td class="texto-tenue">{{ v.usuario|default:'-' }}</td>
           <td class="num">{{ v.descuento }}</td>
           <td class="num"><strong>{{ v.total }}</strong></td>
           <td class="texto-tenue">{{ v.get_metodo_pago_display }}</td>
@@ -40,24 +81,16 @@ va al punto de venta, y quien viene a vender una membresia a su pantalla.
           </td>
         </tr>
       {% empty %}
-        <tr><td colspan="9" class="vacio">
-          Sin ventas cobradas. Se cobra en el
-          <a href="{% url 'ventas:pos' %}">punto de venta</a>.
+        <tr><td colspan="8" class="vacio">
+          {% if es_hoy %}
+            Todavia no se cobra nada hoy. Se cobra en la
+            <a href="{% url 'ventas:pos' %}">caja</a>.
+          {% else %}
+            Ese dia no se cobro nada.
+          {% endif %}
         </td></tr>
       {% endfor %}
     </tbody>
   </table>
 </div>
-
-{% if is_paginated %}
-  <div class="o-paginacion">
-    {% if page_obj.has_previous %}
-      <a href="?page={{ page_obj.previous_page_number }}" class="btn">Anterior</a>
-    {% endif %}
-    <span>Pagina {{ page_obj.number }} de {{ paginator.num_pages }}</span>
-    {% if page_obj.has_next %}
-      <a href="?page={{ page_obj.next_page_number }}" class="btn">Siguiente</a>
-    {% endif %}
-  </div>
-{% endif %}
 {% endblock %}

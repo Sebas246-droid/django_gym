@@ -351,6 +351,11 @@ class HistorialDeVentasTest(PuntoDeVentaTest):
     def listar(self):
         return self.client.get(reverse('ventas:venta_list'))
 
+    def cobrar(self, metodo='efectivo'):
+        self.agregar()
+        self.client.post(reverse('ventas:pos_cobrar'), {'metodo_pago': metodo})
+        return Venta.objects.filter(estado=Venta.CONFIRMADA).order_by('-pk').first()
+
     def test_el_carrito_abierto_no_se_lista_como_venta(self):
         self.agregar()
 
@@ -418,3 +423,88 @@ class CarritoPorSucursalTest(PuntoDeVentaTest):
         nuevo = Venta.objects.filter(estado=Venta.BORRADOR, sucursal=otra).first()
         self.assertIsNotNone(nuevo)
         self.assertNotEqual(nuevo.pk, viejo.pk)
+
+
+class CorteDelDiaTest(PuntoDeVentaTest):
+    """
+    Quien abre el historial casi siempre cierra turno: la pregunta es cuanto
+    lleva hoy y en que se cobro, no que se vendio en marzo.
+    """
+
+    def cobrar(self, metodo='efectivo', dias_atras=0):
+        self.agregar()
+        self.client.post(reverse('ventas:pos_cobrar'), {'metodo_pago': metodo})
+        venta = Venta.objects.filter(estado=Venta.CONFIRMADA).order_by('-pk').first()
+        if dias_atras:
+            Venta.objects.filter(pk=venta.pk).update(
+                fecha=venta.fecha - timedelta(days=dias_atras)
+            )
+        return venta
+
+    def ver(self, dia=None):
+        return self.client.get(
+            reverse('ventas:venta_list'), {'dia': dia} if dia else {}
+        )
+
+    def test_abre_en_hoy(self):
+        contexto = self.ver().context
+        self.assertEqual(contexto['dia'], timezone.localdate())
+        self.assertTrue(contexto['es_hoy'])
+
+    def test_suma_lo_cobrado_hoy_y_cuenta_los_tickets(self):
+        self.cobrar()
+        self.cobrar()
+
+        contexto = self.ver().context
+
+        self.assertEqual(contexto['tickets'], 2)
+        self.assertEqual(contexto['total_dia'], 1000)
+
+    def test_lo_de_ayer_no_entra_en_el_corte_de_hoy(self):
+        self.cobrar(dias_atras=1)
+
+        contexto = self.ver().context
+
+        self.assertEqual(contexto['tickets'], 0)
+        self.assertEqual(contexto['total_dia'], 0)
+        self.assertEqual(list(contexto['ventas']), [])
+
+    def test_se_puede_mirar_un_dia_anterior(self):
+        ayer = timezone.localdate() - timedelta(days=1)
+        self.cobrar(dias_atras=1)
+
+        contexto = self.ver(ayer.isoformat()).context
+
+        self.assertEqual(contexto['tickets'], 1)
+        self.assertFalse(contexto['es_hoy'])
+
+    def test_reparte_el_total_por_metodo_de_pago(self):
+        self.cobrar('efectivo')
+        self.cobrar('tarjeta')
+
+        metodos = dict(self.ver().context['metodos'])
+
+        self.assertEqual(metodos['Efectivo'], 500)
+        self.assertEqual(metodos['Tarjeta'], 500)
+        self.assertEqual(metodos['Transferencia'], 0, 'los ceros tambien se muestran')
+
+    def test_no_ofrece_adelantarse_a_manana(self):
+        """No hay nada cobrado ahi, y el boton invitaria a buscarlo."""
+        self.assertIsNone(self.ver().context['dia_siguiente'])
+
+    def test_desde_un_dia_viejo_si_se_avanza(self):
+        ayer = timezone.localdate() - timedelta(days=1)
+        self.assertEqual(
+            self.ver(ayer.isoformat()).context['dia_siguiente'], timezone.localdate()
+        )
+
+    def test_una_fecha_ilegible_en_la_url_no_rompe(self):
+        respuesta = self.ver('el-martes')
+
+        self.assertEqual(respuesta.status_code, 200)
+        self.assertEqual(respuesta.context['dia'], timezone.localdate())
+
+    def test_el_carrito_abierto_no_suma_al_corte(self):
+        self.agregar()
+
+        self.assertEqual(self.ver().context['total_dia'], 0)

@@ -13,13 +13,9 @@ MENU_POR_VISTA = {
     'core:gym_create': 'saas',
     'core:gym_update': 'saas',
     'clientes:checkin': 'checkin',
+    'clientes:asistencia_list': 'asistencias',
     'clientes:asistencia_registrar': 'checkin',
     'clientes:asistencia_entrenamiento': 'checkin',
-    'ventas:pos': 'pos',
-    'ventas:pos_agregar': 'pos',
-    'ventas:pos_linea': 'pos',
-    'ventas:pos_cobrar': 'pos',
-    'ventas:pos_cancelar': 'pos',
 }
 
 MENU_POR_APP = {
@@ -27,7 +23,8 @@ MENU_POR_APP = {
     'clientes': 'clientes',
     'entrenamiento': 'entrenamientos',
     'inventario': 'inventario',
-    'ventas': 'ventas',
+    # El historial vive dentro del punto de venta, en una pestana.
+    'ventas': 'pos',
     'accounts': 'staff',
     'core': 'sucursales',
 }

@@ -1,4 +1,5 @@
 {% extends 'base.html' %}
+{% load humanize %}
 {% load l10n %}
 
 {% block title %}Tablero - GymPilot{% endblock %}
@@ -18,18 +19,18 @@
 
   <div class="hero-dinero">
     <span class="rotulo">Ingresos de hoy</span>
-    <div class="cifra">{{ ingresos_hoy|floatformat:0 }}</div>
+    <div class="cifra">{{ ingresos_hoy|floatformat:0|intcomma }}</div>
 
     <div class="hero-chips">
       {# El desglose es por donde se cobro. El numero en negritas es cuantas. #}
       <span class="chip">
         <i class="punto punto-tenue"></i>
-        Mostrador {{ ingreso_mostrador|floatformat:0 }}
+        Mostrador {{ ingreso_mostrador|floatformat:0|intcomma }}
         <b>{{ ventas_hoy }}</b>
       </span>
       <span class="chip">
         <i class="punto punto-claro"></i>
-        Membresias {{ ingreso_membresias|floatformat:0 }}
+        Membresias {{ ingreso_membresias|floatformat:0|intcomma }}
         <b>{{ membresias_vendidas_hoy }}</b>
       </span>
     </div>
@@ -39,11 +40,11 @@
         {% for b in barras_ingreso %}
           <span class="mini-barra {% if b.hoy %}es-hoy{% endif %}"
                 style="height:{{ b.alto }}%"
-                title="{{ b.dia|date:'D j' }}: {{ b.monto|floatformat:0 }}"></span>
+                title="{{ b.dia|date:'D j' }}: {{ b.monto|floatformat:0|intcomma }}"></span>
         {% endfor %}
       </div>
       <span class="hero-pie">
-        Ultimos 7 dias <b>{{ ingreso_semana|floatformat:0 }}</b>
+        Ultimos 7 dias <b>{{ ingreso_semana|floatformat:0|intcomma }}</b>
       </span>
     </div>
   </div>

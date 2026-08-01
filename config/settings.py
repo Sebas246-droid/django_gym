@@ -56,6 +56,8 @@ INSTALLED_APPS = [
     'django.contrib.sessions',
     'django.contrib.messages',
     'django.contrib.staticfiles',
+    # Solo por intcomma: un total de cinco cifras sin separador no se lee.
+    'django.contrib.humanize',
 
     'core',
     'accounts',
