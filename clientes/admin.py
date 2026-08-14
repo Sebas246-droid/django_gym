@@ -1,6 +1,15 @@
 from django.contrib import admin
 
-from clientes.models import Asistencia, Cliente, ClienteMembresia, Membresia
+from clientes.models import Asistencia, Cliente, ClienteMembresia, Huella, Membresia
+
+
+@admin.register(Huella)
+class HuellaAdmin(admin.ModelAdmin):
+    # La plantilla no se muestra ni se edita: es dato personal sensible y en
+    # pantalla no dice nada util.
+    list_display = ['cliente', 'dedo', 'calidad', 'lector', 'activo']
+    list_filter = ['gym', 'dedo', 'activo']
+    search_fields = ['cliente__nombre']
 
 
 @admin.register(Membresia)

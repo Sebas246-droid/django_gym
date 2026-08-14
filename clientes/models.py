@@ -186,6 +186,52 @@ class Cliente(GymModel):
         return max(vigente.fin + timedelta(days=1), hoy)
 
 
+class Huella(GymModel):
+    """
+    La huella enrolada de un socio, para entrar sin teclear su numero.
+
+    Se guarda la *plantilla* que devuelve el lector, nunca la imagen del dedo:
+    pesa menos, no se puede volver a convertir en huella y es lo unico que
+    necesita la comparacion. Son datos personales sensibles, asi que no salen
+    de la base ni se suben al bucket junto con las fotos.
+
+    El formato de la plantilla es propietario de cada marca: por eso se anota
+    con que lector se enrolo. Si algun dia se cambia de modelo, esa columna
+    dice a quien hay que volver a enrolar.
+    """
+
+    DEDOS = [
+        ('indice_der', 'Indice derecho'),
+        ('pulgar_der', 'Pulgar derecho'),
+        ('indice_izq', 'Indice izquierdo'),
+        ('pulgar_izq', 'Pulgar izquierdo'),
+    ]
+
+    cliente = models.ForeignKey(
+        Cliente, on_delete=models.CASCADE, related_name='huellas'
+    )
+    dedo = models.CharField(max_length=12, choices=DEDOS, default='indice_der')
+    plantilla = models.BinaryField(editable=False)
+    calidad = models.PositiveSmallIntegerField(
+        default=0, help_text='Que tan buena salio la lectura, de 0 a 100.'
+    )
+    lector = models.CharField(
+        max_length=40,
+        blank=True,
+        help_text='Con que lector se enrolo. Las plantillas no son compatibles '
+                  'entre marcas.',
+    )
+
+    class Meta:
+        ordering = ['cliente', 'dedo']
+        unique_together = [('cliente', 'dedo')]
+        verbose_name = 'Huella'
+        verbose_name_plural = 'Huellas'
+
+    def __str__(self):
+        return f'{self.cliente} - {self.get_dedo_display()}'
+
+
 class ClienteMembresia(GymModel):
     """Historial completo de compras de membresias (incluye el cobro)."""
 
@@ -208,6 +254,16 @@ class ClienteMembresia(GymModel):
     )
     membresia = models.ForeignKey(
         Membresia, on_delete=models.PROTECT, related_name='ventas'
+    )
+    # En que sede se cobro. Se guarda aqui y no se deduce del usuario porque el
+    # usuario cambia de sucursal: sin esta columna, mover a un recepcionista de
+    # sede reescribia a que sucursal pertenecen todas sus ventas pasadas.
+    sucursal = models.ForeignKey(
+        'core.Sucursal',
+        on_delete=models.PROTECT,
+        related_name='membresias_vendidas',
+        null=True,
+        blank=True,
     )
     inicio = models.DateField(default=timezone.localdate)
     fin = models.DateField(blank=True)
@@ -271,15 +327,22 @@ class ClienteMembresia(GymModel):
         ).exclude(estado=cls.CANCELADA)
 
     @classmethod
-    def cobradas_aparte(cls, gym, dia):
+    def cobradas_aparte(cls, gym, dia, sucursal=None):
         """
         Las cobradas desde su propia pantalla, que son las unicas cuyo dinero
         no esta ya dentro de una Venta. Contar tambien las del punto de venta
         duplicaria los ingresos del dia.
+
+        Con `sucursal` se acota a una sede. Se deja fuera lo que no tiene sede
+        grabada: son cobros viejos de antes de que existiera la columna, y
+        colgarselos a una sucursal cualquiera seria inventar el dato.
         """
-        return cls.objects.filter(
+        qs = cls.objects.filter(
             gym=gym, activo=True, fecha_pago__date=dia, venta_detalle__isnull=True
         ).exclude(estado=cls.CANCELADA)
+        if sucursal is not None:
+            qs = qs.filter(sucursal=sucursal)
+        return qs
 
     def save(self, *args, **kwargs):
         if not self.fin:

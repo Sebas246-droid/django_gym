@@ -192,6 +192,27 @@
 
       <button type="submit" class="principal-btn" id="enviar" disabled>Registrar entrada</button>
     </form>
+
+    {% if hay_huellas %}
+      {% comment %}
+      Va fuera del teclado porque son dos envios distintos. Con el lector de
+      verdad este boton sobra: el agente avisa solo en cuanto lee el dedo.
+      {% endcomment %}
+      <form method="post" action="{% url 'clientes:checkin_huella' %}" class="huella">
+        {% csrf_token %}
+        <button type="submit">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"
+               stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <path d="M12 11v3a9 9 0 0 1-.7 3.5"/>
+            <path d="M8.5 10.5a3.5 3.5 0 0 1 7 0V14a13 13 0 0 1-.5 3.5"/>
+            <path d="M5 10.5a7 7 0 0 1 14 0V14a17 17 0 0 1-.4 3.6"/>
+            <path d="M8.6 20.5A16 16 0 0 0 10 14v-3.5"/>
+            <path d="M3.5 7.5a10 10 0 0 1 17 0"/>
+          </svg>
+          O entra con tu huella
+        </button>
+      </form>
+    {% endif %}
   {% endif %}
 
 </div>

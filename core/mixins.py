@@ -27,6 +27,62 @@ class GymRequiredMixin(LoginRequiredMixin):
     def gym(self):
         return self.request.user.gym
 
+    @property
+    def sucursales(self):
+        return self.gym.sucursales.filter(activo=True).order_by('nombre')
+
+    @property
+    def sucursal_de_trabajo(self):
+        """
+        En que sede esta parada la persona que usa el sistema.
+
+        Antes cada vista lo resolvia por su cuenta con
+        `user.sucursal or la_primera`, y eso tenia dos agujeros: a quien no
+        tenia sede asignada lo ponia a cobrar en una que nunca eligio, y a
+        quien seguia asignado a una sucursal dada de baja lo dejaba cobrando
+        ahi mientras el resto del sistema ya la daba por cerrada.
+
+        Ahora la sede dada de baja no cuenta, y devolver la primera es el
+        ultimo recurso: quien llama avisa cuando eso pasa.
+        """
+        propia = self.request.user.sucursal
+        if propia and propia.activo:
+            return propia
+        return self.sucursales.first()
+
+    @property
+    def sucursal_es_prestada(self):
+        """True cuando la sede que se esta usando no es la del usuario."""
+        propia = self.request.user.sucursal
+        return not (propia and propia.activo)
+
+    def avisar_si_la_sucursal_es_prestada(self):
+        """
+        Un aviso visible en vez de un cobro silencioso en la sede equivocada.
+
+        Si la sede asignada existe pero esta dada de baja, el aviso sale
+        siempre: a esa persona la estan mandando a cobrar a otro lado. Si
+        simplemente no tiene sede, solo se avisa cuando hay mas de una activa
+        entre las cuales confundirse; en un gimnasio de un local seria ruido.
+        """
+        if not self.sucursal_es_prestada:
+            return
+
+        propia = self.request.user.sucursal
+        if propia is None and self.sucursales.count() < 2:
+            return
+
+        motivo = (
+            f'Tu sucursal ({propia}) esta dada de baja'
+            if propia
+            else 'No tienes sucursal asignada'
+        )
+        messages.warning(
+            self.request,
+            f'{motivo}: estas trabajando en {self.sucursal_de_trabajo}. '
+            'Pide que te asignen la correcta antes de cobrar.',
+        )
+
 
 class GymQuerysetMixin(GymRequiredMixin):
     """Filtra SIEMPRE por gym del usuario. Nunca se mezclan los datos."""

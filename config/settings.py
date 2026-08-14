@@ -128,12 +128,39 @@ elif os.getenv('POSTGRES_DB'):
         }
     }
 else:
+    # SQLite es la base de la edicion local: un gimnasio, una maquina, y el
+    # respaldo es copiar un archivo. Los dos ajustes de abajo no son adorno:
+    #   - WAL deja leer mientras alguien escribe. Sin el, el kiosco marcando
+    #     una entrada le saca 'database is locked' a la caja cobrando.
+    #   - timeout da margen para esperar en vez de reventar al primer choque.
     DATABASES = {
         'default': {
             'ENGINE': 'django.db.backends.sqlite3',
-            'NAME': BASE_DIR / 'db.sqlite3',
+            'NAME': Path(os.getenv('SQLITE_PATH', BASE_DIR / 'db.sqlite3')),
+            'OPTIONS': {
+                'timeout': 20,
+                'init_command': (
+                    'PRAGMA journal_mode=WAL;'
+                    'PRAGMA synchronous=NORMAL;'
+                    'PRAGMA foreign_keys=ON;'
+                ),
+            },
         }
     }
+
+
+# --- Edicion del producto --------------------------------------------------
+# 'saas'  : el multi-gimnasio de Railway, como hasta ahora.
+# 'local' : una instalacion en la PC del gimnasio, un solo gym, pago unico.
+# Es una variable y no un repo aparte: el negocio (socios, membresias, ventas,
+# inventario, accesos) es identico en las dos, y mantenerlo por duplicado
+# significa arreglar cada error dos veces.
+EDICION = os.getenv('GYMPILOT_EDICION', 'saas')
+ES_LOCAL = EDICION == 'local'
+
+#: De donde sale la huella. En la edicion local el lector esta colgado de la
+#: misma maquina que corre Django, asi que se lee directo.
+LECTOR_HUELLAS = os.getenv('LECTOR_HUELLAS', '')
 
 
 AUTH_USER_MODEL = 'accounts.User'

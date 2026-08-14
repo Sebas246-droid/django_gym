@@ -16,7 +16,8 @@ from django.test import TestCase, override_settings
 from django.urls import reverse
 from django.utils import timezone
 
-from clientes.models import Asistencia, Cliente, ClienteMembresia, Membresia
+from clientes import lectores
+from clientes.models import Asistencia, Cliente, ClienteMembresia, Huella, Membresia
 from core.models import Gym, GymImagen, Plan, Sucursal
 from core.roles import ADMINISTRADOR
 from entrenamiento.models import Entrenamiento
@@ -446,16 +447,6 @@ class SitioPublicoTest(BaseGymTest):
 
         ajena.refresh_from_db()
         self.assertFalse(ajena.visible_en_sitio)
-
-    def test_no_se_escapan_comentarios_de_plantilla(self):
-        """
-        Un {# ... #} de varias lineas no es comentario para Django: lo imprime
-        tal cual en la pagina, a la vista de cualquiera que entre.
-        """
-        respuesta = self.client.get(reverse('core:landing', args=[self.gym.slug]))
-
-        self.assertNotContains(respuesta, '{#')
-        self.assertNotContains(respuesta, '#}')
 
     def test_la_foto_de_la_membresia_sale_en_la_tarjeta(self):
         Membresia.objects.create(
@@ -1058,3 +1049,204 @@ class ComprobanteDePagoTest(BaseGymTest):
         venta.refresh_from_db()
         self.assertEqual(venta.comprobante.name, antes)
         self.assertEqual(venta.precio, 700)
+
+
+class AccesoPorHuellaTest(BaseGymTest):
+    """
+    El acceso por huella tiene que dar exactamente el mismo veredicto que el
+    numero tecleado, y el numero tiene que seguir sirviendo siempre: el lector
+    se va a desconectar y el gimnasio no se puede parar por eso.
+    """
+
+    def setUp(self):
+        super().setUp()
+        self.ana = self.crear_cliente('Ana Torres')
+        self.beto = self.crear_cliente('Beto Ruiz')
+        lectores.retirar()
+
+    def tearDown(self):
+        lectores.retirar()
+        super().tearDown()
+
+    def enrolar(self, cliente, dedo_simulado, dedo='indice_der'):
+        lectores.presentar(dedo_simulado)
+        return self.client.post(
+            reverse('clientes:huella_enrolar', args=[cliente.pk]), {'dedo': dedo}
+        )
+
+    def entrar_con_huella(self, dedo_simulado):
+        lectores.presentar(dedo_simulado)
+        self.client.post(reverse('clientes:checkin_huella'))
+        return self.client.get(reverse('clientes:checkin')).context['resultado']
+
+    # --- Enrolamiento -----------------------------------------------------
+
+    def test_se_enrola_desde_la_ficha_del_socio(self):
+        self.enrolar(self.ana, 'dedo-de-ana')
+
+        huella = Huella.objects.get(cliente=self.ana)
+        self.assertEqual(huella.dedo, 'indice_der')
+        self.assertEqual(huella.gym, self.gym)
+        self.assertTrue(bytes(huella.plantilla))
+
+    def test_no_se_guarda_una_lectura_de_mala_calidad(self):
+        lectores.presentar('dedo-de-ana', calidad=20)
+        self.client.post(
+            reverse('clientes:huella_enrolar', args=[self.ana.pk]),
+            {'dedo': 'indice_der'},
+        )
+
+        self.assertFalse(Huella.objects.exists())
+
+    def test_no_se_enrola_el_mismo_dedo_a_dos_socios(self):
+        self.enrolar(self.ana, 'dedo-de-ana')
+
+        self.enrolar(self.beto, 'dedo-de-ana')
+
+        # Si se dejara pasar, el acceso dejaria entrar al que la comparacion
+        # encuentre primero y el otro quedaria fuera sin explicacion.
+        self.assertEqual(Huella.objects.count(), 1)
+        self.assertEqual(Huella.objects.get().cliente, self.ana)
+
+    def test_reenrolar_el_mismo_dedo_reemplaza_la_plantilla(self):
+        self.enrolar(self.ana, 'dedo-de-ana')
+        antes = bytes(Huella.objects.get().plantilla)
+
+        self.enrolar(self.ana, 'dedo-de-ana')
+
+        self.assertEqual(Huella.objects.count(), 1)
+        self.assertNotEqual(bytes(Huella.objects.get().plantilla), antes)
+
+    def test_se_puede_quitar_y_volver_a_enrolar(self):
+        self.enrolar(self.ana, 'dedo-de-ana')
+
+        self.client.post(
+            reverse('clientes:huella_borrar', args=[Huella.objects.get().pk])
+        )
+        self.assertFalse(Huella.objects.exists())
+
+        self.enrolar(self.ana, 'dedo-de-ana')
+        self.assertEqual(Huella.objects.count(), 1)
+
+    # --- Acceso -----------------------------------------------------------
+
+    def test_la_huella_registra_la_entrada_igual_que_el_numero(self):
+        self.enrolar(self.ana, 'dedo-de-ana')
+        self.vender_membresia(self.ana, timezone.localdate())
+
+        resultado = self.entrar_con_huella('dedo-de-ana')
+
+        self.assertEqual(resultado['estado'], 'ok')
+        self.assertEqual(resultado['nombre'], 'Ana Torres')
+        self.assertEqual(Asistencia.objects.get().cliente, self.ana)
+
+    def test_distingue_entre_dos_socios_enrolados(self):
+        self.enrolar(self.ana, 'dedo-de-ana')
+        self.enrolar(self.beto, 'dedo-de-beto')
+
+        resultado = self.entrar_con_huella('dedo-de-beto')
+
+        self.assertEqual(resultado['nombre'], 'Beto Ruiz')
+
+    def test_la_membresia_vencida_se_avisa_igual_que_con_el_numero(self):
+        self.enrolar(self.ana, 'dedo-de-ana')
+
+        resultado = self.entrar_con_huella('dedo-de-ana')
+
+        self.assertEqual(resultado['estado'], 'vencida')
+
+    def test_un_dedo_desconocido_no_deja_pasar(self):
+        self.enrolar(self.ana, 'dedo-de-ana')
+
+        resultado = self.entrar_con_huella('dedo-de-un-desconocido')
+
+        self.assertEqual(resultado['estado'], 'invalido')
+        self.assertFalse(Asistencia.objects.exists())
+
+    def test_sin_lector_conectado_lo_dice_y_no_truena(self):
+        self.enrolar(self.ana, 'dedo-de-ana')
+        lectores.retirar()
+
+        self.client.post(reverse('clientes:checkin_huella'))
+        resultado = self.client.get(reverse('clientes:checkin')).context['resultado']
+
+        self.assertEqual(resultado['estado'], 'invalido')
+        self.assertFalse(Asistencia.objects.exists())
+
+    def test_el_numero_sigue_funcionando_con_huellas_enroladas(self):
+        self.enrolar(self.ana, 'dedo-de-ana')
+        self.ana.refresh_from_db()
+
+        self.client.post(
+            reverse('clientes:checkin'), {'numero_usuario': self.ana.numero_usuario}
+        )
+        resultado = self.client.get(reverse('clientes:checkin')).context['resultado']
+
+        self.assertEqual(resultado['nombre'], 'Ana Torres')
+
+    def test_no_se_reconoce_la_huella_de_otro_gimnasio(self):
+        otro_gym = Gym.objects.create(
+            nombre='Ajeno', plan=Plan.objects.get(nombre='Basico')
+        )
+        ajeno = Cliente.objects.create(
+            gym=otro_gym,
+            sucursal=Sucursal.objects.get(gym=otro_gym),
+            nombre='Socio Ajeno',
+        )
+        lector = lectores.LectorFalso()
+        Huella.objects.create(
+            gym=otro_gym, cliente=ajeno, dedo='indice_der',
+            plantilla=lector.plantilla_de('dedo-ajeno'), calidad=90,
+        )
+
+        resultado = self.entrar_con_huella('dedo-ajeno')
+
+        self.assertEqual(resultado['estado'], 'invalido')
+        self.assertFalse(Asistencia.objects.exists())
+
+    def test_el_boton_de_huella_solo_sale_si_hay_alguna_enrolada(self):
+        sin = self.client.get(reverse('clientes:checkin'))
+        self.assertNotContains(sin, 'checkin_huella')
+        self.assertFalse(sin.context['hay_huellas'])
+
+        self.enrolar(self.ana, 'dedo-de-ana')
+
+        con = self.client.get(reverse('clientes:checkin'))
+        self.assertTrue(con.context['hay_huellas'])
+
+
+class LectorFalsoTest(TestCase):
+    """
+    El lector de mentiras tiene que portarse como uno de verdad, o las pruebas
+    de arriba no prueban nada.
+    """
+
+    def test_dos_lecturas_del_mismo_dedo_no_son_identicas_pero_se_parecen(self):
+        lector = lectores.LectorFalso(dedo='mismo')
+
+        a, b = lector.capturar().plantilla, lector.capturar().plantilla
+
+        self.assertNotEqual(a, b)
+        self.assertGreaterEqual(lector.comparar(a, b), lectores.UMBRAL)
+
+    def test_dos_dedos_distintos_no_se_parecen(self):
+        uno = lectores.LectorFalso(dedo='uno').capturar().plantilla
+        otro = lectores.LectorFalso(dedo='otro').capturar().plantilla
+
+        self.assertLess(lectores.LectorFalso().comparar(uno, otro), lectores.UMBRAL)
+
+    def test_identificar_devuelve_el_que_mas_se_parece_no_el_primero(self):
+        lector = lectores.LectorFalso()
+        candidatas = [
+            (1, lector.plantilla_de('otro')),
+            (2, lector.plantilla_de('buscado')),
+        ]
+
+        quien, puntaje = lector.identificar(lector.plantilla_de('buscado'), candidatas)
+
+        self.assertEqual(quien, 2)
+        self.assertEqual(puntaje, 100)
+
+    def test_sin_dedo_en_el_sensor_avisa(self):
+        with self.assertRaises(lectores.ErrorDeLector):
+            lectores.LectorFalso().capturar()

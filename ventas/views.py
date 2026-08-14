@@ -29,13 +29,16 @@ class VentaListView(GymQuerysetMixin, ListView):
     def get_queryset(self):
         # Un borrador es el carrito de alguien en la caja: ni se cobro ni toco
         # el inventario, asi que no es una venta y no va en el historial.
-        return (
+        qs = (
             super()
             .get_queryset()
             .filter(estado=Venta.CONFIRMADA, fecha__date=self.dia)
             .select_related('cliente', 'sucursal', 'usuario')
             .order_by('-fecha')
         )
+        if self.sucursal_vista is not None:
+            qs = qs.filter(sucursal=self.sucursal_vista)
+        return qs
 
     @cached_property
     def dia(self):
@@ -45,6 +48,29 @@ class VentaListView(GymQuerysetMixin, ListView):
         except (KeyError, ValueError):
             return timezone.localdate()
 
+    @cached_property
+    def sucursal_vista(self):
+        """
+        De que sede es el corte. None significa todas juntas.
+
+        Por omision se abre en la sede de quien mira, porque este corte es lo
+        que se compara contra el efectivo del cajon y ese cajon es de una sola
+        caja. Antes salia la suma de todo el gimnasio: con dos sucursales, el
+        de Norte cuadraba su cajon contra un total que incluia a Centro y le
+        aparecia un faltante que no existia.
+
+        Con `?sucursal=todas` se ve el gimnasio completo, que es lo que quiere
+        el dueno. Y un gimnasio de una sola sede no nota nada de esto.
+        """
+        pedida = self.request.GET.get('sucursal', '')
+        if pedida == 'todas':
+            return None
+        if pedida.isdigit():
+            elegida = self.sucursales.filter(pk=pedida).first()
+            if elegida:
+                return elegida
+        return self.sucursal_de_trabajo
+
     def get_context_data(self, **kwargs):
         ctx = super().get_context_data(**kwargs)
         hoy = timezone.localdate()
@@ -52,9 +78,17 @@ class VentaListView(GymQuerysetMixin, ListView):
 
         resumen = cobradas.aggregate(total=Sum('total'), tickets=Count('pk'))
         # El corte por metodo es lo que se compara contra el efectivo en el cajon.
+        #
+        # El order_by() vacio no sobra: el listado viene ordenado por fecha, y
+        # esa fecha se cuela en el GROUP BY. Con eso el agrupado devuelve un
+        # renglon por venta en vez de uno por metodo, y el diccionario se queda
+        # con el importe de la ultima. Tres cobros de 100 en efectivo salian
+        # como "Efectivo 100" al lado de un "Cobrado 300".
         por_metodo = {
             fila['metodo_pago']: fila['suma']
-            for fila in cobradas.values('metodo_pago').annotate(suma=Sum('total'))
+            for fila in cobradas.order_by()
+            .values('metodo_pago')
+            .annotate(suma=Sum('total'))
         }
 
         ctx.update({
@@ -70,6 +104,14 @@ class VentaListView(GymQuerysetMixin, ListView):
                 (etiqueta, por_metodo.get(clave, 0))
                 for clave, etiqueta in Venta.METODOS_PAGO
             ],
+            'sucursales': self.sucursales,
+            'sucursal_vista': self.sucursal_vista,
+            # El selector solo estorba en un gimnasio de una sola sede.
+            'varias_sucursales': self.sucursales.count() > 1,
+            # Para que las flechas de dia no tiren la sucursal elegida.
+            'param_sucursal': (
+                f'{self.sucursal_vista.pk}' if self.sucursal_vista else 'todas'
+            ),
         })
         return ctx
 

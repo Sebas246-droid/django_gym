@@ -3,6 +3,7 @@ from django.db.models import Sum
 from django.shortcuts import get_object_or_404, redirect
 from django.urls import reverse_lazy
 from django.utils import timezone
+from django.utils.functional import cached_property
 from django.views.generic import (
     CreateView,
     DetailView,
@@ -98,21 +99,48 @@ class DashboardView(GymRequiredMixin, TemplateView):
             puntos.append({'x': round(x, 1), 'y': round(y, 1), 'valor': valor})
         return puntos, tope
 
+    @cached_property
+    def sucursal_vista(self):
+        """
+        De que sede son las cifras. None es el gimnasio completo.
+
+        Abre en "todas" a proposito: el tablero lo mira sobre todo el dueno, y
+        cambiarle el default a la sede del usuario le escondería la mitad del
+        negocio sin avisar. Quien lleva una sola sucursal la elige y el sistema
+        no vuelve a preguntar mientras no cambie la url.
+        """
+        pedida = self.request.GET.get('sucursal', '')
+        if pedida.isdigit():
+            return self.sucursales.filter(pk=pedida).first()
+        return None
+
+    def _de_la_sede(self, qs, campo='sucursal'):
+        """Acota una consulta a la sede elegida. Sin sede, la deja como esta."""
+        if self.sucursal_vista is None:
+            return qs
+        return qs.filter(**{campo: self.sucursal_vista})
+
     def get_context_data(self, **kwargs):
         ctx = super().get_context_data(**kwargs)
         gym = self.request.user.gym
         hoy = timezone.localdate()
         ayer = hoy - timezone.timedelta(days=1)
         en_una_semana = hoy + timezone.timedelta(days=7)
+        sede = self.sucursal_vista
+
+        ctx['sucursales'] = self.sucursales
+        ctx['sucursal_vista'] = sede
+        # Con una sola sucursal el selector no aporta nada y estorba.
+        ctx['varias_sucursales'] = self.sucursales.count() > 1
 
         # --- Dinero de hoy, con su desglose --------------------------------
         # El desglose es por donde se cobro, no por que se vendio: una
         # membresia cobrada en caja ya viene dentro del total de esa venta.
-        ventas_hoy = Venta.objects.filter(
-            gym=gym, fecha__date=hoy, estado=Venta.CONFIRMADA
+        ventas_hoy = self._de_la_sede(
+            Venta.objects.filter(gym=gym, fecha__date=hoy, estado=Venta.CONFIRMADA)
         )
         ingreso_mostrador = ventas_hoy.aggregate(t=Sum('total'))['t'] or 0
-        cobros_hoy = ClienteMembresia.cobradas_aparte(gym, hoy)
+        cobros_hoy = ClienteMembresia.cobradas_aparte(gym, hoy, sede)
         ingreso_membresias = sum(cm.total for cm in cobros_hoy)
 
         ctx['ingreso_mostrador'] = ingreso_mostrador
@@ -120,22 +148,26 @@ class DashboardView(GymRequiredMixin, TemplateView):
         ctx['ingresos_hoy'] = ingreso_mostrador + ingreso_membresias
         ctx['ventas_hoy'] = ventas_hoy.count()
         # Aqui si cuentan todas: es cuantas se vendieron, no cuanto entro.
-        ctx['membresias_vendidas_hoy'] = ClienteMembresia.objects.filter(
-            gym=gym, activo=True, fecha_pago__date=hoy
-        ).exclude(estado='cancelada').count()
+        ctx['membresias_vendidas_hoy'] = self._de_la_sede(
+            ClienteMembresia.objects.filter(
+                gym=gym, activo=True, fecha_pago__date=hoy
+            ).exclude(estado='cancelada')
+        ).count()
 
         # Ingresos de los ultimos 7 dias, para las barras del encabezado
         barras = []
         for atras in range(6, -1, -1):
             dia = hoy - timezone.timedelta(days=atras)
             productos = (
-                Venta.objects.filter(
-                    gym=gym, fecha__date=dia, estado=Venta.CONFIRMADA
+                self._de_la_sede(
+                    Venta.objects.filter(
+                        gym=gym, fecha__date=dia, estado=Venta.CONFIRMADA
+                    )
                 ).aggregate(t=Sum('total'))['t']
                 or 0
             )
             membresias = sum(
-                cm.total for cm in ClienteMembresia.cobradas_aparte(gym, dia)
+                cm.total for cm in ClienteMembresia.cobradas_aparte(gym, dia, sede)
             )
             barras.append({'dia': dia, 'monto': productos + membresias, 'hoy': dia == hoy})
         techo = max([b['monto'] for b in barras] + [1])
@@ -145,14 +177,16 @@ class DashboardView(GymRequiredMixin, TemplateView):
         ctx['ingreso_semana'] = sum(b['monto'] for b in barras)
 
         # --- Actividad ------------------------------------------------------
-        entradas = Asistencia.objects.filter(gym=gym, tipo=Asistencia.ENTRADA)
+        entradas = self._de_la_sede(
+            Asistencia.objects.filter(gym=gym, tipo=Asistencia.ENTRADA)
+        )
         ctx['asistencias_hoy'] = entradas.filter(fecha_hora__date=hoy).count()
         ctx['asistencias_ayer'] = entradas.filter(fecha_hora__date=ayer).count()
         ctx['variacion_entradas'] = ctx['asistencias_hoy'] - ctx['asistencias_ayer']
 
         # Quien sigue dentro: su ultimo movimiento de hoy fue una entrada
-        movimientos = Asistencia.objects.filter(
-            gym=gym, fecha_hora__date=hoy
+        movimientos = self._de_la_sede(
+            Asistencia.objects.filter(gym=gym, fecha_hora__date=hoy)
         ).order_by('fecha_hora')
         ultimo_por_cliente = {}
         for mov in movimientos:
@@ -183,11 +217,16 @@ class DashboardView(GymRequiredMixin, TemplateView):
         }
 
         # --- Cartera de clientes -------------------------------------------
-        clientes = Cliente.objects.filter(gym=gym, activo=True)
+        # La cartera se corta por la sede del socio, no por donde compro: es
+        # "cuanta de MI gente esta al corriente", y alguien de Centro que
+        # renovo de paso en Norte sigue siendo cartera de Centro.
+        clientes = self._de_la_sede(Cliente.objects.filter(gym=gym, activo=True))
         total = clientes.count()
         # Una cancelada conserva fechas que abarcan hoy: sin excluirla, la
         # cartera se veria mas sana de lo que esta.
-        vigentes_qs = ClienteMembresia.vigentes_en(hoy).filter(gym=gym)
+        vigentes_qs = self._de_la_sede(
+            ClienteMembresia.vigentes_en(hoy).filter(gym=gym), 'cliente__sucursal'
+        )
         vigentes = vigentes_qs.values('cliente_id').distinct().count()
         por_vencer_total = (
             vigentes_qs.filter(fin__lte=en_una_semana)
@@ -210,7 +249,9 @@ class DashboardView(GymRequiredMixin, TemplateView):
             'cobertura': round(vigentes * 100 / base),
         }
 
-        # Quien no aparece hace dos semanas: es a quien hay que llamar
+        # Quien no aparece hace dos semanas: es a quien hay que llamar.
+        # Las visitas NO se acotan por sede: si el socio de Centro estuvo yendo
+        # a Norte, no esta ausente y llamarle quedaria mal.
         visitaron = (
             Asistencia.objects.filter(
                 gym=gym, fecha_hora__date__gte=hoy - timezone.timedelta(days=14)
@@ -225,13 +266,16 @@ class DashboardView(GymRequiredMixin, TemplateView):
         # --- Lo mas vendido del mes -----------------------------------------
         inicio_mes = hoy.replace(day=1)
         ctx['top_productos'] = (
-            VentaDetalle.objects.filter(
-                venta__gym=gym,
-                venta__estado=Venta.CONFIRMADA,
-                venta__fecha__date__gte=inicio_mes,
-                # Las lineas de membresia no son producto: agruparlas por
-                # nombre las juntaria todas bajo una fila vacia.
-                producto__isnull=False,
+            self._de_la_sede(
+                VentaDetalle.objects.filter(
+                    venta__gym=gym,
+                    venta__estado=Venta.CONFIRMADA,
+                    venta__fecha__date__gte=inicio_mes,
+                    # Las lineas de membresia no son producto: agruparlas por
+                    # nombre las juntaria todas bajo una fila vacia.
+                    producto__isnull=False,
+                ),
+                'venta__sucursal',
             )
             .values('producto__nombre')
             .annotate(piezas=Sum('cantidad'))
@@ -250,21 +294,22 @@ class DashboardView(GymRequiredMixin, TemplateView):
             .order_by('fin')[:4]
         )
         ctx['ultimos_accesos'] = (
-            Asistencia.objects.filter(gym=gym, fecha_hora__date=hoy)
+            self._de_la_sede(Asistencia.objects.filter(gym=gym, fecha_hora__date=hoy))
             .select_related('cliente')
             .order_by('-fecha_hora')[:5]
         )
         bajos = [
             inv
-            for inv in InventarioSucursal.objects.filter(
-                producto__gym=gym, producto__activo=True
+            for inv in self._de_la_sede(
+                InventarioSucursal.objects.filter(
+                    producto__gym=gym, producto__activo=True
+                )
             ).select_related('producto', 'sucursal')
             if inv.bajo_minimo
         ]
         ctx['stock_bajo_total'] = len(bajos)
         ctx['stock_bajo'] = bajos[:4]
         ctx['productos_total'] = Producto.objects.filter(gym=gym, activo=True).count()
-        ctx['sucursales'] = Sucursal.objects.filter(gym=gym, activo=True)
         return ctx
 
 
@@ -364,8 +409,42 @@ class SucursalUpdateView(AdminRequiredMixin, GymFormMixin, UpdateView):
 
 
 class SucursalDeleteView(AdminRequiredMixin, SoftDeleteView):
+    """
+    Baja de una sede. No se permite si queda gente asignada a ella.
+
+    Antes se daba de baja sin mirar: quien seguia asignado se quedaba cobrando
+    en una sucursal que el resto del sistema ya daba por cerrada, y el
+    inventario le ofrecia otra distinta. Es mas barato obligar a mover a la
+    gente primero que perseguir despues las ventas que quedaron en el limbo.
+    """
+
     model = Sucursal
     success_url = reverse_lazy('core:sucursal_list')
+
+    def form_valid(self, form):
+        sucursal = self.get_object()
+
+        if self.gym.sucursales.filter(activo=True).count() < 2:
+            messages.error(
+                self.request,
+                'Es la unica sucursal activa: el gimnasio no puede quedarse sin ninguna.',
+            )
+            return redirect(self.success_url)
+
+        asignados = sucursal.users.filter(is_active=True)
+        if asignados.exists():
+            nombres = ', '.join(str(u) for u in asignados[:3])
+            resto = asignados.count() - 3
+            if resto > 0:
+                nombres += f' y {resto} mas'
+            messages.error(
+                self.request,
+                f'No se puede dar de baja {sucursal}: siguen asignados {nombres}. '
+                'Muevelos a otra sucursal primero.',
+            )
+            return redirect(self.success_url)
+
+        return super().form_valid(form)
 
 
 # --- Configuracion del sitio publico --------------------------------------

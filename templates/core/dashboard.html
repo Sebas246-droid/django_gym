@@ -10,6 +10,24 @@
   <a href="{% url 'ventas:pos' %}" class="btn btn-primario">Punto de venta</a>
   <a href="{% url 'clientes:clientemembresia_create' %}" class="btn">Vender membresia</a>
   <a href="{% url 'clientes:checkin' %}" class="btn">Kiosco</a>
+  {% if varias_sucursales %}
+    {% comment %}
+    Abre en el gimnasio completo, que es lo que quiere ver el dueno. Elegir una
+    sede acota TODAS las cifras de esta pantalla, no solo algunas.
+    {% endcomment %}
+    <form method="get" class="filtro-sede">
+      <select name="sucursal" onchange="this.form.submit()"
+              aria-label="Sucursal del tablero">
+        <option value="">Todas las sucursales</option>
+        {% for s in sucursales %}
+          <option value="{{ s.pk }}"
+            {% if sucursal_vista and sucursal_vista.pk == s.pk %}selected{% endif %}>
+            {{ s.nombre }}
+          </option>
+        {% endfor %}
+      </select>
+    </form>
+  {% endif %}
 {% endblock %}
 
 {% block content %}

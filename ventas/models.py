@@ -120,6 +120,9 @@ class Venta(GymModel):
             ClienteMembresia.objects.create(
                 gym=self.gym,
                 cliente=self.cliente,
+                # La sede sale de la venta, no del usuario: es donde de verdad
+                # se cobro, y no cambia si mueven al cajero de sucursal.
+                sucursal=self.sucursal,
                 membresia=detalle.membresia,
                 inicio=self.cliente.inicio_siguiente_membresia,
                 precio=detalle.precio,

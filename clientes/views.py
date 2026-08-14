@@ -15,8 +15,9 @@ from django.views.generic import (
     View,
 )
 
+from clientes import lectores
 from clientes.forms import ClienteForm, ClienteMembresiaForm, MembresiaForm
-from clientes.models import Asistencia, Cliente, ClienteMembresia, Membresia
+from clientes.models import Asistencia, Cliente, ClienteMembresia, Huella, Membresia
 from core.mixins import GymFormMixin, GymQuerysetMixin, GymRequiredMixin, SoftDeleteView
 from entrenamiento.models import Entrenamiento
 
@@ -94,6 +95,7 @@ class ClienteDetailView(GymQuerysetMixin, DetailView):
         ctx['asistencias'] = self.object.asistencias.select_related('entrenamiento')[:20]
         # El historico esta ordenado del mas reciente al mas viejo.
         ctx['ultimo_peso'] = self.object.medidas.first()
+        ctx['dedos'] = Huella.DEDOS
         return ctx
 
 
@@ -209,6 +211,9 @@ class ClienteMembresiaCreateView(GymFormMixin, CreateView):
 
     def form_valid(self, form):
         form.instance.usuario = self.request.user
+        # La sede queda grabada en la venta: si despues mueven de sucursal a
+        # quien cobro, el historico no se reescribe solo.
+        form.instance.sucursal = self.sucursal_de_trabajo
         respuesta = super().form_valid(form)
 
         anterior = getattr(form, 'encadenada_tras', None)
@@ -315,6 +320,12 @@ class CheckinView(GymRequiredMixin, TemplateView):
         ctx['digitos'] = digitos
         ctx['digitos_rango'] = range(digitos)
 
+        # El boton de huella solo aparece si alguien la tiene enrolada: en un
+        # gimnasio sin lector no debe salir nada.
+        ctx['hay_huellas'] = Huella.objects.filter(
+            gym=self.gym, activo=True, cliente__activo=True
+        ).exists()
+
         # Segundo paso: solo se ofrece a quien acaba de pasar y aun no eligio.
         resultado = ctx['resultado'] or {}
         if resultado.get('asistencia_id') and resultado.get('estado') in ('ok', 'aviso'):
@@ -373,7 +384,16 @@ class CheckinView(GymRequiredMixin, TemplateView):
                 'mensaje': f'Ningun cliente activo tiene el numero {numero}.',
                 'numero': numero,
             }
+        return self._veredicto(cliente, tipo, entrenamiento_id)
 
+    def _veredicto(self, cliente, tipo, entrenamiento_id=None):
+        """
+        Registra la entrada y arma lo que ve el socio en la pantalla.
+
+        Parte del cliente y no del numero tecleado a proposito: por aqui entra
+        tambien el acceso por huella, y las dos formas de identificarse tienen
+        que dar exactamente el mismo veredicto.
+        """
         asistencia = self._registrar(cliente, tipo, entrenamiento_id)
         vigente = cliente.membresia_vigente
         base = {
@@ -473,9 +493,157 @@ class AsistenciaRegistrarView(GymRequiredMixin, View):
         cliente = get_object_or_404(Cliente, pk=pk, gym=request.user.gym, activo=True)
         vista = CheckinView()
         vista.request = request
-        request.session['acceso'] = vista._resolver(
-            cliente.numero_usuario,
+        # Se pasa el cliente y no su numero: aqui ya sabemos quien es, y un
+        # socio con el numero vacio se atoraba en 'Numero invalido'.
+        request.session['acceso'] = vista._veredicto(
+            cliente,
             request.POST.get('tipo', Asistencia.ENTRADA),
             request.POST.get('entrenamiento') or None,
         )
         return redirect('clientes:checkin')
+
+
+# --- Acceso por huella ----------------------------------------------------
+
+
+class CheckinHuellaView(CheckinView):
+    """
+    Entrada por huella: el mismo kiosco, sin teclear el numero.
+
+    Hereda de CheckinView para reusar tal cual el veredicto y el registro de
+    asistencia. Lo unico que cambia es como se averigua quien es la persona.
+    """
+
+    def post(self, request, *args, **kwargs):
+        tipo = request.POST.get('tipo', Asistencia.ENTRADA)
+        request.session['acceso'] = self._resolver_huella(tipo)
+        return redirect('clientes:checkin')
+
+    def _resolver_huella(self, tipo):
+        lector = lectores.obtener_lector()
+        try:
+            captura = lector.capturar()
+        except lectores.ErrorDeLector as error:
+            return {
+                'estado': 'invalido',
+                'titulo': 'El lector no respondio',
+                'mensaje': str(error),
+                'detalle': 'Teclea tu numero mientras tanto.',
+            }
+
+        candidatas = self._plantillas()
+        if not candidatas:
+            return {
+                'estado': 'invalido',
+                'titulo': 'Sin huellas registradas',
+                'mensaje': 'Todavia nadie enrola su huella en este gimnasio.',
+                'detalle': 'Teclea tu numero para entrar.',
+            }
+
+        cliente_id, puntaje = lector.identificar(
+            captura.plantilla, [(pk, plantilla) for pk, plantilla, _ in candidatas]
+        )
+        if cliente_id is None:
+            return {
+                'estado': 'invalido',
+                'titulo': 'Huella no reconocida',
+                'mensaje': 'No encontramos tu huella. Vuelve a intentar.',
+                'detalle': 'Si no funciona, teclea tu numero.',
+                'puntaje': puntaje,
+            }
+
+        cliente = next(c for pk, _, c in candidatas if pk == cliente_id)
+        return self._veredicto(cliente, tipo) | {'puntaje': puntaje}
+
+    def _plantillas(self):
+        """
+        Todas las huellas del gimnasio, listas para comparar.
+
+        La comparacion 1:N se hace en memoria porque la base no sabe medir
+        parecido entre plantillas. Con unos cientos de socios es instantaneo;
+        el dia que sean miles, hay que acotar por sucursal.
+        """
+        huellas = (
+            Huella.objects
+            .filter(gym=self.gym, activo=True, cliente__activo=True)
+            .select_related('cliente')
+        )
+        # bytes() porque Postgres devuelve memoryview y SQLite bytes.
+        return [(h.cliente_id, bytes(h.plantilla), h.cliente) for h in huellas]
+
+
+class HuellaEnrolarView(GymRequiredMixin, View):
+    """Captura la huella de un socio desde su ficha."""
+
+    def post(self, request, pk):
+        cliente = get_object_or_404(Cliente, pk=pk, gym=request.user.gym, activo=True)
+        dedo = request.POST.get('dedo', '')
+        if dedo not in dict(Huella.DEDOS):
+            messages.error(request, 'Elige que dedo vas a enrolar.')
+            return redirect('clientes:cliente_detail', pk=pk)
+
+        lector = lectores.obtener_lector()
+        try:
+            captura = lector.capturar()
+        except lectores.ErrorDeLector as error:
+            messages.error(request, f'No se pudo leer: {error}')
+            return redirect('clientes:cliente_detail', pk=pk)
+
+        if not captura.sirve:
+            messages.error(
+                request,
+                f'La lectura salio de calidad {captura.calidad} y se necesita al '
+                f'menos {lectores.CALIDAD_MINIMA}. Limpia el sensor y repite.',
+            )
+            return redirect('clientes:cliente_detail', pk=pk)
+
+        ajeno = self._de_quien_mas_es(lector, captura.plantilla, cliente)
+        if ajeno:
+            # Sin esto dos socios podrian quedar con la misma huella y el acceso
+            # dejaria pasar al que la comparacion encuentre primero.
+            messages.error(
+                request, f'Ese dedo ya esta enrolado a nombre de {ajeno.nombre}.'
+            )
+            return redirect('clientes:cliente_detail', pk=pk)
+
+        Huella.objects.update_or_create(
+            cliente=cliente,
+            dedo=dedo,
+            defaults={
+                'gym': request.user.gym,
+                'plantilla': captura.plantilla,
+                'calidad': captura.calidad,
+                'lector': lector.nombre,
+                'activo': True,
+            },
+        )
+        messages.success(request, f'Huella registrada ({dict(Huella.DEDOS)[dedo]}).')
+        return redirect('clientes:cliente_detail', pk=pk)
+
+    def _de_quien_mas_es(self, lector, plantilla, cliente):
+        ajenas = (
+            Huella.objects
+            .filter(gym=cliente.gym, activo=True)
+            .exclude(cliente=cliente)
+            .select_related('cliente')
+        )
+        candidatas = [(h.cliente_id, bytes(h.plantilla)) for h in ajenas]
+        cliente_id, _ = lector.identificar(plantilla, candidatas)
+        if cliente_id is None:
+            return None
+        return next(h.cliente for h in ajenas if h.cliente_id == cliente_id)
+
+
+class HuellaBorrarView(GymRequiredMixin, View):
+    """
+    Quita una huella. Se borra de verdad, no se da de baja: no tiene valor
+    historico y el unico por (cliente, dedo) impediria volver a enrolar ese
+    mismo dedo si el renglon se quedara ahi apagado.
+    """
+
+    def post(self, request, pk):
+        huella = get_object_or_404(Huella, pk=pk, gym=request.user.gym)
+        cliente_id = huella.cliente_id
+        huella.delete()
+        messages.success(request, 'Huella eliminada.')
+        return redirect('clientes:cliente_detail', pk=cliente_id)

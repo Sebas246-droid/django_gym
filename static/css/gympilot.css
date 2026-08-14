@@ -1124,6 +1124,23 @@ table.o-lista .inactiva td { opacity: .5; }
 }
 .btn.inerte { opacity: .3; pointer-events: none; }
 
+/* Selectores de sede. Solo aparecen con dos o mas sucursales. */
+.filtro-sede { display: inline-block; }
+.filtro-sede select {
+  margin: 0;
+  height: 34px;
+  padding: 0 10px;
+  font-size: 13px;
+  max-width: 210px;
+}
+.corte-sede select {
+  margin: 0;
+  height: 32px;
+  padding: 0 8px;
+  font-size: 12.5px;
+  max-width: 190px;
+}
+
 .corte-cifras { display: flex; align-items: center; gap: 26px; flex-wrap: wrap; }
 .corte-cifras .etiqueta {
   font-size: 11px;
@@ -1391,6 +1408,22 @@ table.o-lista .inactiva td { opacity: .5; }
 table.o-datos th { width: 40%; font-weight: 500; color: var(--tinta-3); }
 table.o-datos td, table.o-datos th { padding: 7px 0; }
 table.o-datos tbody tr:hover { background: none; }
+
+/* Huellas del socio. No van en la tabla de datos porque no son pares
+   etiqueta/valor: "Indice derecho" no cabe en la columna angosta y se encimaba
+   con la calidad. */
+.lista-huellas { list-style: none; margin: 0 0 12px; padding: 0; }
+.lista-huellas li {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  padding: 7px 0;
+  border-bottom: 1px solid var(--borde);
+  font-size: 13.5px;
+}
+.lista-huellas li:last-child { border-bottom: 0; }
+.lista-huellas .dedo { font-weight: 550; margin-right: auto; }
+.lista-huellas form { display: inline; }
 
 /* El nombre en azul no anuncia que abre nada: esto si, y por eso se lee */
 .enlace-ficha { color: var(--tinta-2); font-weight: 550; white-space: nowrap; }

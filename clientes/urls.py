@@ -52,8 +52,20 @@ urlpatterns = [
         name='clientemembresia_cancelar',
     ),
 
+    path(
+        '<int:pk>/huella/', views.HuellaEnrolarView.as_view(), name='huella_enrolar'
+    ),
+    path(
+        'huella/<int:pk>/quitar/',
+        views.HuellaBorrarView.as_view(),
+        name='huella_borrar',
+    ),
+
     path('asistencias/', views.AsistenciaListView.as_view(), name='asistencia_list'),
     path('acceso/', views.CheckinView.as_view(), name='checkin'),
+    path(
+        'acceso/huella/', views.CheckinHuellaView.as_view(), name='checkin_huella'
+    ),
     path(
         'acceso/<int:pk>/registrar/',
         views.AsistenciaRegistrarView.as_view(),

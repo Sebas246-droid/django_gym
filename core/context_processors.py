@@ -1,3 +1,5 @@
+from django.conf import settings
+
 from core.roles import es_admin, es_entrenador, es_recepcion
 
 # Que entrada del menu se ilumina segun la url actual
@@ -47,8 +49,9 @@ def gym_context(request):
     """Datos del gym disponibles en todas las plantillas."""
     user = getattr(request, 'user', None)
     if not user or not user.is_authenticated:
-        return {}
+        return {'es_local': settings.ES_LOCAL}
     return {
+        'es_local': settings.ES_LOCAL,
         'gym_actual': user.gym,
         'sucursal_actual': user.sucursal,
         'es_admin': es_admin(user),

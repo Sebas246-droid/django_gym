@@ -1,9 +1,12 @@
 """Prueba de humo del flujo completo descrito en el README."""
 
+from unittest import skipUnless
+
 from django.contrib.auth import get_user_model
 from django.contrib.auth.models import Group
 from django.core.management import call_command
-from django.test import TestCase
+from django.db import connection
+from django.test import TestCase, TransactionTestCase
 from django.urls import reverse
 from django.utils import timezone
 
@@ -384,3 +387,145 @@ class TodasLasPantallasAbrenTest(TestCase):
     def test_el_punto_de_venta_queda_marcado_al_ver_el_historial(self):
         respuesta = self.client.get(reverse('ventas:venta_list'))
         self.assertEqual(respuesta.context['menu'], 'pos')
+
+
+class PlantillasSanasTest(TestCase):
+    """
+    Revisa el codigo fuente de las plantillas, no lo que rinden.
+
+    Django solo entiende {# ... #} cuando abre y cierra en la misma linea. Si
+    se parte en dos, deja de ser comentario y el texto sale impreso en la
+    pagina, a la vista de cualquiera. Ya paso dos veces, y no se nota hasta que
+    alguien mira la pantalla: ninguna prueba de vista lo detecta.
+    """
+
+    def test_ningun_comentario_se_queda_abierto(self):
+        from pathlib import Path
+
+        from django.conf import settings
+
+        rotas = []
+        raices = [Path(settings.BASE_DIR) / 'templates']
+        raices += [Path(settings.BASE_DIR) / app / 'templates'
+                   for app in ('core', 'accounts', 'clientes', 'entrenamiento',
+                               'inventario', 'ventas', 'bot')]
+
+        for raiz in raices:
+            for archivo in sorted(raiz.rglob('*.html')) if raiz.exists() else []:
+                for numero, linea in enumerate(archivo.read_text().splitlines(), 1):
+                    if '{#' in linea and '#}' not in linea.split('{#', 1)[1]:
+                        rotas.append(f'{archivo.name}:{numero}')
+
+        self.assertEqual(
+            rotas, [],
+            'Comentario {# #} partido en varias lineas: usa {% comment %}. '
+            f'En: {", ".join(rotas)}',
+        )
+
+
+class EdicionLocalTest(TestCase):
+    """
+    La instalacion que se le manda al gimnasio que paga una sola vez: un
+    gimnasio, una base SQLite y un administrador, sin panel de SaaS.
+    """
+
+    def test_preparar_local_deja_todo_listo(self):
+        call_command('preparar_local', gimnasio='Iron House', admin='dueno',
+                     password='secreta123', verbosity=0)
+
+        gym = Gym.objects.get()
+        self.assertEqual(gym.nombre, 'Iron House')
+        self.assertEqual(Sucursal.objects.filter(gym=gym).count(), 1)
+
+        dueno = User.objects.get(username='dueno')
+        self.assertEqual(dueno.gym, gym)
+        self.assertIsNotNone(dueno.sucursal)
+        self.assertTrue(dueno.check_password('secreta123'))
+        # Entra como administrador de su gym, no como superusuario del SaaS:
+        # asi no ve el panel de gimnasios y planes, que aqui no significa nada.
+        self.assertFalse(dueno.is_superuser)
+        self.assertTrue(dueno.groups.filter(name=ADMINISTRADOR).exists())
+
+    def test_correrlo_dos_veces_no_duplica_nada(self):
+        """El instalador lo corre en cada arranque, no solo el primero."""
+        call_command('preparar_local', gimnasio='Iron House', admin='dueno',
+                     password='secreta123', verbosity=0)
+        call_command('preparar_local', gimnasio='Otro Nombre', admin='dueno',
+                     password='otra', verbosity=0)
+
+        self.assertEqual(Gym.objects.count(), 1)
+        self.assertEqual(Gym.objects.get().nombre, 'Iron House')
+        self.assertEqual(User.objects.filter(username='dueno').count(), 1)
+        # La contrasena no se pisa: si la cambiaron, se respeta.
+        self.assertTrue(User.objects.get(username='dueno').check_password('secreta123'))
+
+    def test_sin_contrasena_genera_una(self):
+        call_command('preparar_local', admin='dueno', verbosity=0)
+
+        dueno = User.objects.get(username='dueno')
+        self.assertFalse(dueno.check_password(''))
+        self.assertTrue(dueno.has_usable_password())
+
+    def test_el_administrador_puede_entrar_y_usar_el_sistema(self):
+        call_command('preparar_local', admin='dueno', password='secreta123',
+                     verbosity=0)
+
+        self.assertTrue(self.client.login(username='dueno', password='secreta123'))
+        self.assertEqual(self.client.get(reverse('core:dashboard')).status_code, 200)
+        self.assertEqual(self.client.get(reverse('clientes:cliente_list')).status_code, 200)
+
+
+@skipUnless(connection.vendor == 'sqlite', 'El respaldo es de la edicion local.')
+class RespaldoTest(TransactionTestCase):
+    """
+    Va en TransactionTestCase y no en TestCase: el respaldo de SQLite espera a
+    que no haya transacciones abiertas, y TestCase envuelve cada prueba en una
+    que nunca cierra. En la maquina del gimnasio no existe ese envoltorio.
+
+    Se salta con PostgreSQL: alla el respaldo es cosa de Railway, y el comando
+    lo rechaza a proposito. Sin el skip, la suite corrida contra Postgres
+    fallaba por un comando que se estaba portando bien.
+    """
+
+    def test_el_respaldo_produce_una_base_que_se_puede_abrir(self):
+        import sqlite3
+        import tempfile
+        from pathlib import Path
+
+        call_command('preparar_local', gimnasio='Iron House', verbosity=0)
+
+        with tempfile.TemporaryDirectory() as carpeta:
+            call_command('respaldar', destino=carpeta, verbosity=0)
+
+            copias = list(Path(carpeta).glob('gympilot_*.sqlite3'))
+            self.assertEqual(len(copias), 1)
+
+            # No basta con que exista el archivo: tiene que traer los datos.
+            con = sqlite3.connect(copias[0])
+            nombres = con.execute('SELECT nombre FROM core_gym').fetchall()
+            con.close()
+            self.assertIn(('Iron House',), nombres)
+
+    def test_el_respaldo_tira_los_viejos_y_conserva_los_pedidos(self):
+        """Sin esto la carpeta crece para siempre y llena el disco del gimnasio."""
+        import tempfile
+        import time
+        from pathlib import Path
+
+        call_command('preparar_local', verbosity=0)
+        with tempfile.TemporaryDirectory() as carpeta:
+            viejos = []
+            for n in range(4):
+                archivo = Path(carpeta) / f'gympilot_2020-01-0{n + 1}_0000{n}.sqlite3'
+                archivo.write_bytes(b'respaldo viejo')
+                # Fechas distintas: la limpieza ordena por fecha, no por nombre.
+                time.sleep(0.01)
+                viejos.append(archivo)
+
+            call_command('respaldar', destino=carpeta, conservar=2, verbosity=0)
+
+            quedan = sorted(p.name for p in Path(carpeta).glob('gympilot_*.sqlite3'))
+            self.assertEqual(len(quedan), 2)
+            # El recien hecho siempre sobrevive; los mas viejos se van primero.
+            self.assertFalse(viejos[0].exists())
+            self.assertFalse(viejos[1].exists())

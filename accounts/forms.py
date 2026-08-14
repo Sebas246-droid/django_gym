@@ -94,6 +94,10 @@ class UsuarioUpdateForm(SinSufijoMixin, forms.ModelForm):
         self.fields['sucursal'].queryset = Sucursal.objects.filter(
             gym=gym, activo=True
         )
+        # Obligatoria tambien al editar, no solo al dar de alta. Sin esto se
+        # podia dejar a alguien sin sede, y el punto de venta lo mandaba a
+        # cobrar a la primera sucursal de la lista sin decirle nada.
+        self.fields['sucursal'].required = True
         if self.instance.pk:
             self.fields['rol'].initial = self.instance.groups.first()
 

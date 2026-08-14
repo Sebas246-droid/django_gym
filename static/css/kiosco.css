@@ -222,6 +222,31 @@ a { text-decoration: none; color: inherit; }
 }
 .secundario:hover { color: rgba(255, 255, 255, .82); }
 
+/* --- Entrada por huella --------------------------------------------------- */
+
+.huella { margin-top: 16px; text-align: center; }
+.huella button {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  padding: 14px 26px;
+  border-radius: 999px;
+  border: 1px solid rgba(255, 255, 255, .16);
+  background: rgba(255, 255, 255, .05);
+  color: rgba(255, 255, 255, .82);
+  font-family: inherit;
+  font-size: 15px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: border-color .15s ease, color .15s ease, background .15s ease;
+}
+.huella button:hover {
+  border-color: var(--acento);
+  background: rgba(var(--acento-rgb), .12);
+  color: #fff;
+}
+.huella svg { width: 24px; height: 24px; color: var(--acento); }
+
 /* --- Resultado ----------------------------------------------------------- */
 
 .resultado { text-align: center; }

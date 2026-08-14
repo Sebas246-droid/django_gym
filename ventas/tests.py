@@ -488,6 +488,40 @@ class CorteDelDiaTest(PuntoDeVentaTest):
         self.assertEqual(metodos['Tarjeta'], 500)
         self.assertEqual(metodos['Transferencia'], 0, 'los ceros tambien se muestran')
 
+    def test_suma_varios_cobros_del_mismo_metodo(self):
+        """
+        Con una venta por metodo el corte salia bien aunque el agrupado
+        estuviera roto, que es como paso desapercibido. Con dos o mas del mismo
+        metodo, el desglose mostraba solo el importe de la ultima: quien
+        cuadraba el cajon contra ese numero encontraba un faltante inexistente.
+        """
+        self.cobrar('efectivo')
+        self.cobrar('efectivo')
+        self.cobrar('efectivo')
+
+        contexto = self.ver().context
+        metodos = dict(contexto['metodos'])
+
+        self.assertEqual(metodos['Efectivo'], 1500)
+        # El desglose y el total tienen que cuadrar entre si, siempre.
+        self.assertEqual(sum(importe for _, importe in contexto['metodos']),
+                         contexto['total_dia'])
+
+    def test_el_desglose_cuadra_con_el_total_mezclando_metodos(self):
+        self.cobrar('efectivo')
+        self.cobrar('efectivo')
+        self.cobrar('tarjeta')
+        self.cobrar('transferencia')
+        self.cobrar('transferencia')
+
+        contexto = self.ver().context
+        metodos = dict(contexto['metodos'])
+
+        self.assertEqual(metodos['Efectivo'], 1000)
+        self.assertEqual(metodos['Tarjeta'], 500)
+        self.assertEqual(metodos['Transferencia'], 1000)
+        self.assertEqual(contexto['total_dia'], 2500)
+
     def test_no_ofrece_adelantarse_a_manana(self):
         """No hay nada cobrado ahi, y el boton invitaria a buscarlo."""
         self.assertIsNone(self.ver().context['dia_siguiente'])

@@ -28,9 +28,7 @@ class CarritoMixin(GymRequiredMixin):
 
     @property
     def sucursal(self):
-        return self.request.user.sucursal or self.gym.sucursales.filter(
-            activo=True
-        ).first()
+        return self.sucursal_de_trabajo
 
     def carrito(self, crear=True):
         # La sucursal entra en la busqueda: si al cajero lo cambiaron de sede,
@@ -59,6 +57,9 @@ class POSView(CarritoMixin, TemplateView):
 
     def get_context_data(self, **kwargs):
         ctx = super().get_context_data(**kwargs)
+        # Abrir la caja es el momento de enterarse de que se esta cobrando en
+        # una sede que no es la tuya, no despues de descontar el stock.
+        self.avisar_si_la_sucursal_es_prestada()
         sucursal = self.sucursal
         # Abrir la caja no crea nada: el carrito nace al agregar el primer producto.
         venta = self.carrito(crear=False)

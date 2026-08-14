@@ -23,24 +23,47 @@ Quien abre esto casi siempre cierra turno: primero el corte, luego los tickets.
 {% endcomment %}
 <section class="corte">
   <div class="corte-dia">
-    <a href="?dia={{ dia_anterior|date:'Y-m-d' }}" class="btn btn-mini"
-       title="Dia anterior">&larr;</a>
+    <a href="?dia={{ dia_anterior|date:'Y-m-d' }}&sucursal={{ param_sucursal }}"
+       class="btn btn-mini" title="Dia anterior">&larr;</a>
     <div class="corte-fecha">
       <strong>{% if es_hoy %}Hoy{% else %}{{ dia|date:'l'|capfirst }}{% endif %}</strong>
       <span>{{ dia|date:'j \d\e F \d\e Y' }}</span>
     </div>
     {% if dia_siguiente %}
-      <a href="?dia={{ dia_siguiente|date:'Y-m-d' }}" class="btn btn-mini"
-         title="Dia siguiente">&rarr;</a>
+      <a href="?dia={{ dia_siguiente|date:'Y-m-d' }}&sucursal={{ param_sucursal }}"
+         class="btn btn-mini" title="Dia siguiente">&rarr;</a>
     {% else %}
       {% comment %}Manana no hay nada cobrado, pero el hueco mantiene la fila derecha.{% endcomment %}
       <span class="btn btn-mini inerte" aria-hidden="true">&rarr;</span>
     {% endif %}
     <form method="get" class="corte-salto">
+      <input type="hidden" name="sucursal" value="{{ param_sucursal }}">
       <input type="date" name="dia" value="{{ dia|date:'Y-m-d' }}"
              max="{{ hoy|date:'Y-m-d' }}" onchange="this.form.submit()">
     </form>
   </div>
+
+  {% if varias_sucursales %}
+    {% comment %}
+    El corte se compara contra el efectivo de UN cajon, asi que abre en la sede
+    de quien mira. "Todas" es para el dueno, que si quiere la suma del gimnasio.
+    {% endcomment %}
+    <form method="get" class="corte-sede">
+      <input type="hidden" name="dia" value="{{ dia|date:'Y-m-d' }}">
+      <select name="sucursal" onchange="this.form.submit()"
+              aria-label="Sucursal del corte">
+        {% for s in sucursales %}
+          <option value="{{ s.pk }}"
+            {% if sucursal_vista and sucursal_vista.pk == s.pk %}selected{% endif %}>
+            {{ s.nombre }}
+          </option>
+        {% endfor %}
+        <option value="todas" {% if not sucursal_vista %}selected{% endif %}>
+          Todas las sucursales
+        </option>
+      </select>
+    </form>
+  {% endif %}
 
   <div class="corte-cifras">
     <div class="corte-total">
