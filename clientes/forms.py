@@ -35,6 +35,7 @@ class ClienteForm(GymModelForm):
         model = Cliente
         fields = [
             'nombre',
+            'numero_usuario',
             'sucursal',
             'telefono',
             'correo',
@@ -47,6 +48,56 @@ class ClienteForm(GymModelForm):
             'telefono_contacto_emergencia',
         ]
         widgets = {'fecha_nacimiento': FechaInput()}
+        labels = {'numero_usuario': 'Numero de socio'}
+        help_texts = {
+            'numero_usuario': (
+                'El que teclea en el kiosco. Dejalo vacio y se asigna solo. '
+                'Si lo cambias, la credencial ya impresa deja de servir.'
+            ),
+        }
+
+    def clean_numero_usuario(self):
+        """
+        El numero se puede cambiar, pero sigue siendo el identificador del
+        socio: unico dentro del gimnasio y de puros digitos.
+
+        El indice de la base ya impide el duplicado, solo que ahi se ve como un
+        error 500 despues de teclear la ficha entera. Aqui se ataja antes y se
+        dice de quien es el numero, que es lo que hace falta para elegir otro.
+        """
+        numero = self.cleaned_data['numero_usuario'].strip()
+        if not numero:
+            # En el alta lo pone el modelo. Al editar, vaciarlo es "no lo
+            # toques" y no "dame otro": sacarle uno nuevo sin que lo pidan le
+            # tumba la credencial y el numero que ya se sabe de memoria.
+            return self.instance.numero_usuario
+
+        if not numero.isdigit():
+            raise forms.ValidationError(
+                'Solo digitos: el kiosco se teclea en un teclado numerico y '
+                'una letra no se puede marcar.'
+            )
+
+        choque = (
+            Cliente.objects.filter(
+                gym_id=self.instance.gym_id, numero_usuario=numero
+            )
+            .exclude(pk=self.instance.pk)
+            .first()
+        )
+        if choque and choque.activo:
+            raise forms.ValidationError(
+                f'El numero {numero} ya es de {choque.nombre}. Elige otro.'
+            )
+        if choque:
+            # Ese socio no sale en las listas, asi que "ya existe" a secas
+            # deja buscando un nombre que no aparece por ningun lado.
+            raise forms.ValidationError(
+                f'El numero {numero} es de {choque.nombre}, con la ficha dada '
+                'de baja. Los numeros no se reciclan: sus accesos y sus cobros '
+                'siguen colgados de ese numero.'
+            )
+        return numero
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)

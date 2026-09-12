@@ -121,6 +121,129 @@ class NumeroUsuarioTest(BaseGymTest):
             Cliente.objects.create(gym=self.gym, sucursal=None, nombre='Sin sucursal')
 
 
+class EditarNumeroDeSocioTest(BaseGymTest):
+    """
+    El numero se puede corregir a mano (el gimnasio llega con su propia
+    numeracion, o alguien quiere el numero de su casillero), pero no deja de
+    ser el identificador: dos socios con el mismo numero rompen el kiosco, que
+    solo sabe de numeros.
+    """
+
+    def editar(self, cliente, numero):
+        return self.client.post(
+            reverse('clientes:cliente_update', args=[cliente.pk]),
+            {
+                'nombre': cliente.nombre,
+                'sucursal': self.sucursal.pk,
+                'numero_usuario': numero,
+            },
+        )
+
+    def test_se_puede_cambiar_por_uno_libre(self):
+        cliente = self.crear_cliente('Ana')
+
+        self.assertEqual(self.editar(cliente, '2500').status_code, 302)
+
+        cliente.refresh_from_db()
+        self.assertEqual(cliente.numero_usuario, '2500')
+
+    def test_uno_ocupado_se_bloquea_y_dice_de_quien_es(self):
+        otro = self.crear_cliente('Ocupa')
+        cliente = self.crear_cliente('Ana')
+        suyo = cliente.numero_usuario
+
+        respuesta = self.editar(cliente, otro.numero_usuario)
+
+        # Sin redireccion: se queda en el formulario porque no guardo.
+        self.assertEqual(respuesta.status_code, 200)
+        self.assertContains(respuesta, 'ya es de Ocupa')
+        cliente.refresh_from_db()
+        self.assertEqual(cliente.numero_usuario, suyo)
+
+    def test_el_de_una_ficha_dada_de_baja_tampoco_se_puede_tomar(self):
+        """Sus accesos y sus cobros siguen colgados de ese numero."""
+        baja = self.crear_cliente('Se fue')
+        baja.soft_delete()
+        cliente = self.crear_cliente('Ana')
+
+        respuesta = self.editar(cliente, baja.numero_usuario)
+
+        self.assertContains(respuesta, 'dada de baja')
+        cliente.refresh_from_db()
+        self.assertNotEqual(cliente.numero_usuario, baja.numero_usuario)
+
+    def test_el_numero_de_otro_gimnasio_no_estorba(self):
+        otro_gym = Gym.objects.create(
+            nombre='Otro', plan=Plan.objects.get(nombre='Basico')
+        )
+        ajeno = Cliente.objects.create(
+            gym=otro_gym, sucursal=Sucursal.objects.get(gym=otro_gym), nombre='Ajeno'
+        )
+        cliente = self.crear_cliente('Ana')
+
+        self.editar(cliente, ajeno.numero_usuario)
+
+        cliente.refresh_from_db()
+        self.assertEqual(cliente.numero_usuario, ajeno.numero_usuario)
+
+    def test_guardar_la_ficha_sin_tocar_el_numero_no_choca_consigo_misma(self):
+        cliente = self.crear_cliente('Ana')
+
+        respuesta = self.editar(cliente, cliente.numero_usuario)
+
+        self.assertEqual(respuesta.status_code, 302)
+
+    def test_vaciarlo_conserva_el_que_ya_tenia(self):
+        """Vaciar es 'no lo toques', no 'dame otro'."""
+        cliente = self.crear_cliente('Ana')
+        suyo = cliente.numero_usuario
+
+        self.editar(cliente, '')
+
+        cliente.refresh_from_db()
+        self.assertEqual(cliente.numero_usuario, suyo)
+
+    def test_con_letras_no_se_podria_teclear_en_el_kiosco(self):
+        cliente = self.crear_cliente('Ana')
+
+        respuesta = self.editar(cliente, 'A12')
+
+        self.assertContains(respuesta, 'Solo digitos')
+        cliente.refresh_from_db()
+        self.assertNotEqual(cliente.numero_usuario, 'A12')
+
+    def test_en_el_alta_se_sigue_asignando_solo(self):
+        self.client.post(
+            reverse('clientes:cliente_create'),
+            {'nombre': 'Nuevo', 'sucursal': self.sucursal.pk, 'numero_usuario': ''},
+        )
+
+        self.assertEqual(Cliente.objects.get(nombre='Nuevo').numero_usuario, '1000')
+
+    def test_en_el_alta_tambien_se_puede_elegir(self):
+        self.client.post(
+            reverse('clientes:cliente_create'),
+            {'nombre': 'Nuevo', 'sucursal': self.sucursal.pk, 'numero_usuario': '77'},
+        )
+
+        self.assertEqual(Cliente.objects.get(nombre='Nuevo').numero_usuario, '77')
+
+    def test_en_el_alta_uno_ocupado_tambien_se_bloquea(self):
+        ocupa = self.crear_cliente('Ocupa')
+
+        respuesta = self.client.post(
+            reverse('clientes:cliente_create'),
+            {
+                'nombre': 'Nuevo',
+                'sucursal': self.sucursal.pk,
+                'numero_usuario': ocupa.numero_usuario,
+            },
+        )
+
+        self.assertContains(respuesta, 'ya es de Ocupa')
+        self.assertFalse(Cliente.objects.filter(nombre='Nuevo').exists())
+
+
 class CredencialTest(BaseGymTest):
     def url(self, cliente):
         return reverse('clientes:cliente_credencial', args=[cliente.pk])
