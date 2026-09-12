@@ -3,6 +3,7 @@
 import re
 import shutil
 import tempfile
+from io import BytesIO
 from datetime import date, timedelta
 from unittest import mock
 
@@ -15,8 +16,9 @@ from django.db import IntegrityError
 from django.test import TestCase, override_settings
 from django.urls import reverse
 from django.utils import timezone
+from PIL import Image
 
-from clientes import lectores
+from clientes import credencial, lectores
 from clientes.models import Asistencia, Cliente, ClienteMembresia, Huella, Membresia
 from core.models import Gym, GymImagen, Plan, Sucursal
 from core.roles import ADMINISTRADOR
@@ -245,33 +247,103 @@ class EditarNumeroDeSocioTest(BaseGymTest):
 
 
 class CredencialTest(BaseGymTest):
+    """
+    La credencial es una imagen, no una pagina: es lo unico que se puede mandar
+    por WhatsApp. La pagina solo la ensena y ofrece compartirla.
+    """
+
     def url(self, cliente):
         return reverse('clientes:cliente_credencial', args=[cliente.pk])
 
-    def test_muestra_los_datos_del_socio(self):
-        cliente = self.crear_cliente('Ana Torres')
-        cuerpo = self.client.get(self.url(cliente)).content.decode()
-        self.assertIn('Ana Torres', cuerpo)
-        self.assertIn(cliente.numero_usuario, cuerpo)
-        self.assertIn(self.gym.nombre, cuerpo)
+    def url_imagen(self, cliente):
+        return reverse('clientes:cliente_credencial_imagen', args=[cliente.pk])
 
-    def test_avisa_cuando_no_hay_membresia_vigente(self):
-        cliente = self.crear_cliente('Sin plan')
+    def test_la_pagina_ensena_la_imagen_que_se_comparte(self):
+        """
+        Ensenar una tarjeta dibujada en CSS y mandar otra hecha en el servidor
+        son dos disenos que se separan en cuanto alguien corrija uno.
+        """
+        cliente = self.crear_cliente('Ana Torres')
+
+        cuerpo = self.client.get(self.url(cliente)).content.decode()
+
+        self.assertIn(self.url_imagen(cliente), cuerpo)
+        self.assertIn('Ana Torres', cuerpo)
+
+    def test_la_imagen_es_un_png_con_forma_de_tarjeta(self):
+        cliente = self.crear_cliente('Ana Torres')
+
+        respuesta = self.client.get(self.url_imagen(cliente))
+
+        self.assertEqual(respuesta['Content-Type'], 'image/png')
+        imagen = Image.open(BytesIO(respuesta.content))
+        self.assertEqual(imagen.format, 'PNG')
+        # Proporcion de tarjeta bancaria, mas el margen de papel de los lados.
+        ancho, alto = imagen.size
+        self.assertAlmostEqual(ancho / alto, 85.6 / 54, delta=0.12)
+
+    def test_el_archivo_se_llama_como_el_socio(self):
+        """En la carpeta de descargas de recepcion acaban veinte credenciales."""
+        cliente = self.crear_cliente('Ana Torres')
+
+        respuesta = self.client.get(self.url_imagen(cliente))
+
         self.assertIn(
-            'Sin membresia vigente', self.client.get(self.url(cliente)).content.decode()
+            f'credencial-{cliente.numero_usuario}-ana-torres.png',
+            respuesta['Content-Disposition'],
         )
+
+    def test_el_pie_dice_hasta_cuando_vale(self):
+        cliente = self.crear_cliente('Ana Torres')
+        venta = self.vender_membresia(cliente, timezone.localdate())
+
+        self.assertEqual(
+            credencial.pie(cliente),
+            [f'Vigente hasta {venta.fin.strftime("%d/%m/%Y")}', self.sucursal.nombre],
+        )
+
+    def test_el_pie_avisa_cuando_no_hay_membresia_vigente(self):
+        cliente = self.crear_cliente('Sin plan')
+
+        self.assertEqual(credencial.pie(cliente)[0], 'Sin membresia vigente')
+
+    def test_un_nombre_larguisimo_no_desborda_la_tarjeta(self):
+        largo = self.crear_cliente(
+            'Maria Fernanda de la Concepcion Villalobos Etchegaray'
+        )
+        corto = self.crear_cliente('Ana')
+
+        self.assertEqual(
+            credencial.dibujar(largo).size, credencial.dibujar(corto).size
+        )
+
+    def test_se_dibuja_aunque_la_foto_no_este_en_el_bucket(self):
+        """
+        Una credencial que revienta por una foto que ya no esta deja al socio
+        sin tarjeta. Se dibuja con su inicial y ya.
+        """
+        cliente = self.crear_cliente('Ana Torres')
+        Cliente.objects.filter(pk=cliente.pk).update(foto='clientes/no-existe.jpg')
+        cliente.refresh_from_db()
+
+        self.assertEqual(self.client.get(self.url_imagen(cliente)).status_code, 200)
 
     def test_no_se_ve_la_de_otro_gimnasio(self):
         otro = Gym.objects.create(nombre='Otro', plan=Plan.objects.get(nombre='Basico'))
         ajeno = Cliente.objects.create(
             gym=otro, sucursal=Sucursal.objects.get(gym=otro), nombre='Ajeno'
         )
+
         self.assertEqual(self.client.get(self.url(ajeno)).status_code, 404)
+        self.assertEqual(self.client.get(self.url_imagen(ajeno)).status_code, 404)
 
     def test_pide_sesion(self):
+        """La credencial se comparte como archivo, nunca como enlace."""
         cliente = self.crear_cliente('Con sesion')
         self.client.logout()
+
         self.assertEqual(self.client.get(self.url(cliente)).status_code, 302)
+        self.assertEqual(self.client.get(self.url_imagen(cliente)).status_code, 302)
 
 
 class AccesoPorNumeroTest(BaseGymTest):

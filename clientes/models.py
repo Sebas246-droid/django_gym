@@ -3,6 +3,7 @@ from datetime import timedelta
 from django.db import IntegrityError, models, transaction
 from django.db.models.functions import Cast
 from django.utils import timezone
+from django.utils.text import slugify
 
 from core.archivos import RutaPorGym, validar_comprobante
 from core.models import GymModel
@@ -137,6 +138,15 @@ class Cliente(GymModel):
             .aggregate(mayor=models.Max('valor'))['mayor']
         )
         return str(1000 if mayor is None else mayor + 1)
+
+    @property
+    def nombre_de_archivo(self):
+        """
+        Como se llama su credencial al guardarla. Lleva nombre y numero porque
+        acaba en la carpeta de descargas de recepcion junto a otras veinte:
+        'credencial.png' repetido no lo encuentra nadie.
+        """
+        return f'credencial-{self.numero_usuario}-{slugify(self.nombre)}.png'
 
     @property
     def membresia_vigente(self):

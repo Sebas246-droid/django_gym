@@ -15,6 +15,11 @@ urlpatterns = [
         views.ClienteCredencialView.as_view(),
         name='cliente_credencial',
     ),
+    path(
+        '<int:pk>/credencial.png',
+        views.ClienteCredencialImagenView.as_view(),
+        name='cliente_credencial_imagen',
+    ),
 
     path('membresias/', views.MembresiaListView.as_view(), name='membresia_list'),
     path(

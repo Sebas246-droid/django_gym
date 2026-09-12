@@ -2,6 +2,7 @@ from datetime import timedelta
 
 from django.contrib import messages
 from django.db.models import Q
+from django.http import HttpResponse
 from django.shortcuts import get_object_or_404, redirect
 from django.urls import reverse_lazy
 from django.utils import timezone
@@ -15,7 +16,7 @@ from django.views.generic import (
     View,
 )
 
-from clientes import lectores
+from clientes import credencial, lectores
 from clientes.forms import ClienteForm, ClienteMembresiaForm, MembresiaForm
 from clientes.models import Asistencia, Cliente, ClienteMembresia, Huella, Membresia
 from core.mixins import GymFormMixin, GymQuerysetMixin, GymRequiredMixin, SoftDeleteView
@@ -145,14 +146,35 @@ class ClienteDeleteView(SoftDeleteView):
 
 class ClienteCredencialView(GymQuerysetMixin, DetailView):
     """
-    Credencial del socio, sola en la pagina y a tamano de tarjeta. Se imprime o
-    se guarda como PDF desde el navegador: no hace falta generar el archivo en
-    el servidor ni sumar una libreria para eso.
+    Credencial del socio, sola en la pagina. Lo que ensena es la imagen que se
+    manda: no hay una version en CSS para la pantalla y otra para el archivo.
     """
 
     model = Cliente
     template_name = 'clientes/credencial.html'
     context_object_name = 'cliente'
+
+
+class ClienteCredencialImagenView(GymQuerysetMixin, DetailView):
+    """
+    La credencial en PNG, que es lo que se puede mandar por WhatsApp.
+
+    Va detras del login como todo lo demas: se comparte el archivo, nunca el
+    enlace. Un enlace abierto seria la ficha de un socio a la vista de
+    cualquiera que lo reenvie.
+    """
+
+    model = Cliente
+
+    def get(self, request, *args, **kwargs):
+        cliente = self.get_object()
+        respuesta = HttpResponse(credencial.png(cliente), content_type='image/png')
+        # inline, no attachment: la pagina la ensena con un <img>, y el boton de
+        # descargar ya trae su propio nombre de archivo.
+        respuesta['Content-Disposition'] = (
+            f'inline; filename="{cliente.nombre_de_archivo}"'
+        )
+        return respuesta
 
 
 # --- Membresias (catalogo) ------------------------------------------------
