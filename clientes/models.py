@@ -238,6 +238,11 @@ class ClienteMembresia(GymModel):
     VIGENTE = 'vigente'
     VENCIDA = 'vencida'
     CANCELADA = 'cancelada'
+    #: A cuantos dias de vencer se empieza a avisar. Vive aqui y no en cada
+    #: pantalla porque el tablero y la lista de clientes tienen que cortar por
+    #: el mismo dia: con dos numeros distintos, el dueno ve siete por vencer en
+    #: una pantalla y cinco en la otra y deja de creerle a las dos.
+    DIAS_AVISO = 5
     ESTADOS = [
         (VIGENTE, 'Vigente'),
         (VENCIDA, 'Vencida'),

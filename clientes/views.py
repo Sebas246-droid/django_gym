@@ -35,10 +35,12 @@ class ClienteListView(GymQuerysetMixin, ListView):
     #: quienes hay detras de cada numero.
     ESTADOS = [
         ('sin_membresia', 'Sin membresia'),
+        ('vencida', 'Vencida'),
         ('por_vencer', 'Por vencer'),
         ('al_corriente', 'Al corriente'),
     ]
-    DIAS_POR_VENCER = 7
+    #: Se toma del modelo para que el corte sea el mismo que el del tablero.
+    DIAS_POR_VENCER = ClienteMembresia.DIAS_AVISO
 
     def get_queryset(self):
         qs = super().get_queryset().select_related('sucursal')
@@ -65,6 +67,17 @@ class ClienteListView(GymQuerysetMixin, ListView):
             # Nunca compro, se le vencio o se le cancelo: para el caso es lo
             # mismo, hoy no puede entrar.
             return qs.exclude(pk__in=con_vigente)
+
+        if estado == 'vencida':
+            # Mas fino que el anterior: solo quien ya fue socio y se le acabo.
+            # Es el corte al que manda el tablero, porque a quien nunca compro
+            # no se le habla para renovar.
+            no_canceladas = ClienteMembresia.objects.filter(
+                gym=self.gym, activo=True
+            ).exclude(estado=ClienteMembresia.CANCELADA)
+            cubiertos = no_canceladas.filter(fin__gte=hoy).values('cliente_id')
+            ya_fueron = no_canceladas.filter(fin__lt=hoy).values('cliente_id')
+            return qs.filter(pk__in=ya_fueron).exclude(pk__in=cubiertos)
 
         pronto = vigentes.filter(
             fin__lte=hoy + timedelta(days=self.DIAS_POR_VENCER)

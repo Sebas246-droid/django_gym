@@ -1,5 +1,5 @@
 from django.contrib import messages
-from django.db.models import Sum
+from django.db.models import Max, Q, Sum
 from django.shortcuts import get_object_or_404, redirect
 from django.urls import reverse_lazy
 from django.utils import timezone
@@ -23,7 +23,6 @@ from core.mixins import (
     SuperUserRequiredMixin,
 )
 from core.models import Gym, GymImagen, Plan, Sucursal
-from inventario.models import InventarioSucursal, Producto
 from ventas.models import Venta, VentaDetalle
 
 
@@ -71,33 +70,20 @@ class InicioPublicoView(View):
 
 class DashboardView(GymRequiredMixin, TemplateView):
     """
-    Es la primera pantalla que ve el dueno del gimnasio cada manana y la que
-    se ensena al presentar el sistema: debe responder de un vistazo cuanto
-    entro hoy, cuanta gente hay dentro y a quien conviene llamar.
+    Es la primera pantalla que ve el dueno del gimnasio cada manana.
+
+    Va ordenada como se cobra, no como se ve bonito: primero a quien hay que
+    renovarle en los proximos dias (que es lo unico de aqui que todavia se
+    puede salvar con una llamada), luego a quien ya se le vencio, despues las
+    cifras del dia y al final la actividad.
     """
 
     template_name = 'core/dashboard.html'
     extra_context = {'menu': 'dashboard'}
 
-    # --- Grafica de area (coordenadas listas para el SVG) -----------------
-    # El viewBox es ancho y bajo a proposito: el SVG escala en proporcion, y
-    # esta relacion deja la grafica en unos 230px de alto en pantalla.
-    ANCHO = 1200
-    ALTO = 262
-    MARGEN_X = 44
-    TECHO = 34
-    PISO = 212
-
-    def _serie(self, valores):
-        """Convierte una lista de numeros en puntos para el SVG."""
-        tope = max(valores + [1])
-        paso = (self.ANCHO - self.MARGEN_X * 2) / max(len(valores) - 1, 1)
-        puntos = []
-        for i, valor in enumerate(valores):
-            x = self.MARGEN_X + paso * i
-            y = self.PISO - (valor / tope) * (self.PISO - self.TECHO)
-            puntos.append({'x': round(x, 1), 'y': round(y, 1), 'valor': valor})
-        return puntos, tope
+    #: Cuantos renglones se ensenan de cada lista antes de mandar a la
+    #: pantalla completa. Mas de esto y el tablero deja de ser un resumen.
+    FILAS = 8
 
     @cached_property
     def sucursal_vista(self):
@@ -124,25 +110,81 @@ class DashboardView(GymRequiredMixin, TemplateView):
         ctx = super().get_context_data(**kwargs)
         gym = self.request.user.gym
         hoy = timezone.localdate()
-        ayer = hoy - timezone.timedelta(days=1)
-        en_una_semana = hoy + timezone.timedelta(days=7)
         sede = self.sucursal_vista
+        dias = [hoy - timezone.timedelta(days=atras) for atras in range(6, -1, -1)]
 
         ctx['sucursales'] = self.sucursales
         ctx['sucursal_vista'] = sede
         # Con una sola sucursal el selector no aporta nada y estorba.
         ctx['varias_sucursales'] = self.sucursales.count() > 1
+        ctx['dias_aviso'] = ClienteMembresia.DIAS_AVISO
 
-        # --- Dinero de hoy, con su desglose --------------------------------
-        # El desglose es por donde se cobro, no por que se vendio: una
-        # membresia cobrada en caja ya viene dentro del total de esa venta.
+        # --- La cartera, de donde salen las dos listas ----------------------
+        # Se corta por la sede del socio, no por donde compro: es "cuanta de MI
+        # gente esta al corriente", y alguien de Centro que renovo de paso en
+        # Norte sigue siendo cartera de Centro.
+        clientes = self._de_la_sede(Cliente.objects.filter(gym=gym, activo=True))
+        total = clientes.count()
+
+        # Una cancelada conserva fechas que abarcan hoy: sin excluirla, la
+        # cartera se veria mas sana de lo que esta.
+        vigentes_qs = self._de_la_sede(
+            ClienteMembresia.vigentes_en(hoy).filter(gym=gym), 'cliente__sucursal'
+        )
+        vigentes = vigentes_qs.values('cliente_id').distinct().count()
+
+        # --- 1) Por vencer --------------------------------------------------
+        por_vencer_qs = vigentes_qs.filter(
+            fin__lte=hoy + timezone.timedelta(days=ClienteMembresia.DIAS_AVISO)
+        )
+        ctx['por_vencer_total'] = por_vencer_qs.values('cliente_id').distinct().count()
+        ctx['por_vencer'] = list(
+            por_vencer_qs.select_related('cliente', 'membresia').order_by('fin')[
+                : self.FILAS
+            ]
+        )
+        for cm in ctx['por_vencer']:
+            cm.dias = (cm.fin - hoy).days
+
+        # --- 2) Vencidas ----------------------------------------------------
+        # La ultima membresia de quien hoy no tiene ninguna que le alcance.
+        # Estar cubierto NO se corta por sede: si renovo de paso en otra
+        # sucursal sigue al corriente, y sacarlo aqui seria hablarle para
+        # cobrarle algo que ya pago.
+        cubiertos = (
+            ClienteMembresia.objects.filter(gym=gym, activo=True, fin__gte=hoy)
+            .exclude(estado=ClienteMembresia.CANCELADA)
+            .values('cliente_id')
+        )
+        vencidos_qs = (
+            clientes.exclude(pk__in=cubiertos)
+            .annotate(
+                vencio=Max(
+                    'membresias__fin',
+                    filter=Q(membresias__activo=True)
+                    & ~Q(membresias__estado=ClienteMembresia.CANCELADA),
+                )
+            )
+            # Sin fecha es que nunca compro: ese no esta vencido, esta sin
+            # estrenar, y sale en su propio KPI.
+            .filter(vencio__isnull=False)
+            .order_by('-vencio')
+        )
+        ctx['vencidos_total'] = vencidos_qs.count()
+        ctx['vencidos'] = list(vencidos_qs[: self.FILAS])
+        for cliente in ctx['vencidos']:
+            cliente.dias_vencida = (hoy - cliente.vencio).days
+
+        # --- 3) Los KPIs ----------------------------------------------------
+        # El desglose del dinero es por donde se cobro, no por que se vendio:
+        # una membresia cobrada en caja ya viene dentro del total de esa venta.
         ventas_hoy = self._de_la_sede(
             Venta.objects.filter(gym=gym, fecha__date=hoy, estado=Venta.CONFIRMADA)
         )
         ingreso_mostrador = ventas_hoy.aggregate(t=Sum('total'))['t'] or 0
-        cobros_hoy = ClienteMembresia.cobradas_aparte(gym, hoy, sede)
-        ingreso_membresias = sum(cm.total for cm in cobros_hoy)
-
+        ingreso_membresias = sum(
+            cm.total for cm in ClienteMembresia.cobradas_aparte(gym, hoy, sede)
+        )
         ctx['ingreso_mostrador'] = ingreso_mostrador
         ctx['ingreso_membresias'] = ingreso_membresias
         ctx['ingresos_hoy'] = ingreso_mostrador + ingreso_membresias
@@ -154,35 +196,49 @@ class DashboardView(GymRequiredMixin, TemplateView):
             ).exclude(estado='cancelada')
         ).count()
 
-        # Ingresos de los ultimos 7 dias, para las barras del encabezado
-        barras = []
-        for atras in range(6, -1, -1):
-            dia = hoy - timezone.timedelta(days=atras)
-            productos = (
-                self._de_la_sede(
-                    Venta.objects.filter(
-                        gym=gym, fecha__date=dia, estado=Venta.CONFIRMADA
-                    )
-                ).aggregate(t=Sum('total'))['t']
-                or 0
-            )
-            membresias = sum(
-                cm.total for cm in ClienteMembresia.cobradas_aparte(gym, dia, sede)
-            )
-            barras.append({'dia': dia, 'monto': productos + membresias, 'hoy': dia == hoy})
-        techo = max([b['monto'] for b in barras] + [1])
-        for b in barras:
-            b['alto'] = max(round(b['monto'] * 100 / techo), 3)
-        ctx['barras_ingreso'] = barras
-        ctx['ingreso_semana'] = sum(b['monto'] for b in barras)
+        # Los productos de la semana se suman de un golpe; las membresias van
+        # dia por dia porque hay que dejar fuera las que ya vienen dentro de
+        # una venta, o el ingreso se contaria dos veces.
+        productos_semana = (
+            self._de_la_sede(
+                Venta.objects.filter(
+                    gym=gym, fecha__date__gte=dias[0], estado=Venta.CONFIRMADA
+                )
+            ).aggregate(t=Sum('total'))['t']
+            or 0
+        )
+        ingreso_semana = productos_semana + sum(
+            cm.total
+            for dia in dias
+            for cm in ClienteMembresia.cobradas_aparte(gym, dia, sede)
+        )
+        ctx['ingreso_semana'] = ingreso_semana
+        ctx['ingreso_dia_promedio'] = round(ingreso_semana / len(dias))
 
-        # --- Actividad ------------------------------------------------------
+        ctx['clientes_total'] = total
+        ctx['membresias_vigentes'] = vigentes
+        ctx['sin_membresia'] = total - vigentes
+        ctx['cobertura'] = round(vigentes * 100 / (total or 1))
+
+        # --- 4) Entradas ----------------------------------------------------
         entradas = self._de_la_sede(
             Asistencia.objects.filter(gym=gym, tipo=Asistencia.ENTRADA)
         )
-        ctx['asistencias_hoy'] = entradas.filter(fecha_hora__date=hoy).count()
-        ctx['asistencias_ayer'] = entradas.filter(fecha_hora__date=ayer).count()
-        ctx['variacion_entradas'] = ctx['asistencias_hoy'] - ctx['asistencias_ayer']
+        conteos = [entradas.filter(fecha_hora__date=dia).count() for dia in dias]
+        techo = max(conteos + [1])
+        ctx['entradas_semana'] = [
+            {
+                'dia': dia,
+                'valor': valor,
+                # Un dia en cero tambien se dibuja: la barra minima se lee como
+                # "no vino nadie", no como "falta el dato".
+                'alto': max(round(valor * 100 / techo), 4),
+                'hoy': dia == hoy,
+            }
+            for dia, valor in zip(dias, conteos)
+        ]
+        ctx['asistencias_hoy'] = conteos[-1]
+        ctx['variacion_entradas'] = conteos[-1] - conteos[-2]
 
         # Quien sigue dentro: su ultimo movimiento de hoy fue una entrada
         movimientos = self._de_la_sede(
@@ -194,74 +250,6 @@ class DashboardView(GymRequiredMixin, TemplateView):
         ctx['dentro_ahora'] = sum(
             1 for tipo in ultimo_por_cliente.values() if tipo == Asistencia.ENTRADA
         )
-
-        # Grafica de area: entradas de los ultimos 7 dias
-        dias = [hoy - timezone.timedelta(days=atras) for atras in range(6, -1, -1)]
-        conteos = [entradas.filter(fecha_hora__date=dia).count() for dia in dias]
-        puntos, tope = self._serie(conteos)
-        for punto, dia in zip(puntos, dias):
-            punto['dia'] = dia
-            punto['hoy'] = dia == hoy
-        ctx['grafica'] = {
-            'puntos': puntos,
-            'tope': tope,
-            'ancho': self.ANCHO,
-            'alto': self.ALTO,
-            'linea': ' '.join(f"{p['x']},{p['y']}" for p in puntos),
-            'area': (
-                f"{puntos[0]['x']},{self.PISO} "
-                + ' '.join(f"{p['x']},{p['y']}" for p in puntos)
-                + f" {puntos[-1]['x']},{self.PISO}"
-            ),
-            'piso': self.PISO,
-        }
-
-        # --- Cartera de clientes -------------------------------------------
-        # La cartera se corta por la sede del socio, no por donde compro: es
-        # "cuanta de MI gente esta al corriente", y alguien de Centro que
-        # renovo de paso en Norte sigue siendo cartera de Centro.
-        clientes = self._de_la_sede(Cliente.objects.filter(gym=gym, activo=True))
-        total = clientes.count()
-        # Una cancelada conserva fechas que abarcan hoy: sin excluirla, la
-        # cartera se veria mas sana de lo que esta.
-        vigentes_qs = self._de_la_sede(
-            ClienteMembresia.vigentes_en(hoy).filter(gym=gym), 'cliente__sucursal'
-        )
-        vigentes = vigentes_qs.values('cliente_id').distinct().count()
-        por_vencer_total = (
-            vigentes_qs.filter(fin__lte=en_una_semana)
-            .values('cliente_id')
-            .distinct()
-            .count()
-        )
-
-        ctx['clientes_total'] = total
-        ctx['membresias_vigentes'] = vigentes
-        ctx['sin_membresia'] = total - vigentes
-        ctx['por_vencer_total'] = por_vencer_total
-        ctx['al_corriente'] = vigentes - por_vencer_total
-        # Anchos de la barra apilada de salud de la cartera
-        base = total or 1
-        ctx['salud'] = {
-            'al_corriente': round(ctx['al_corriente'] * 100 / base, 1),
-            'por_vencer': round(por_vencer_total * 100 / base, 1),
-            'sin_membresia': round(ctx['sin_membresia'] * 100 / base, 1),
-            'cobertura': round(vigentes * 100 / base),
-        }
-
-        # Quien no aparece hace dos semanas: es a quien hay que llamar.
-        # Las visitas NO se acotan por sede: si el socio de Centro estuvo yendo
-        # a Norte, no esta ausente y llamarle quedaria mal.
-        visitaron = (
-            Asistencia.objects.filter(
-                gym=gym, fecha_hora__date__gte=hoy - timezone.timedelta(days=14)
-            )
-            .values_list('cliente_id', flat=True)
-            .distinct()
-        )
-        ausentes = clientes.exclude(pk__in=visitaron)
-        ctx['ausentes'] = ausentes.count()
-        ctx['ausentes_lista'] = ausentes[:4]
 
         # --- Lo mas vendido del mes -----------------------------------------
         inicio_mes = hoy.replace(day=1)
@@ -281,35 +269,9 @@ class DashboardView(GymRequiredMixin, TemplateView):
             .annotate(piezas=Sum('cantidad'))
             .order_by('-piezas')[:5]
         )
-        tope_top = max(
-            [fila['piezas'] for fila in ctx['top_productos']] + [1]
-        )
+        tope_top = max([fila['piezas'] for fila in ctx['top_productos']] + [1])
         for fila in ctx['top_productos']:
             fila['ancho'] = round(fila['piezas'] * 100 / tope_top)
-
-        # --- Listas accionables --------------------------------------------
-        ctx['por_vencer'] = (
-            vigentes_qs.filter(fin__lte=en_una_semana)
-            .select_related('cliente', 'membresia')
-            .order_by('fin')[:4]
-        )
-        ctx['ultimos_accesos'] = (
-            self._de_la_sede(Asistencia.objects.filter(gym=gym, fecha_hora__date=hoy))
-            .select_related('cliente')
-            .order_by('-fecha_hora')[:5]
-        )
-        bajos = [
-            inv
-            for inv in self._de_la_sede(
-                InventarioSucursal.objects.filter(
-                    producto__gym=gym, producto__activo=True
-                )
-            ).select_related('producto', 'sucursal')
-            if inv.bajo_minimo
-        ]
-        ctx['stock_bajo_total'] = len(bajos)
-        ctx['stock_bajo'] = bajos[:4]
-        ctx['productos_total'] = Producto.objects.filter(gym=gym, activo=True).count()
         return ctx
 
 

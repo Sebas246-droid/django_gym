@@ -836,8 +836,15 @@ class FiltrosDeClientesTest(BaseGymTest):
         nombres = self.filtrar('sin_membresia')
         self.assertCountEqual(nombres, ['Sin nada', 'Vencido'])
 
-    def test_por_vencer_son_los_de_los_proximos_siete_dias(self):
+    def test_por_vencer_son_los_de_los_dias_de_aviso(self):
         self.assertEqual(self.filtrar('por_vencer'), ['Por vencer'])
+
+    def test_vencida_deja_fuera_a_quien_nunca_compro(self):
+        """
+        Es el corte al que manda el tablero. 'Sin membresia' tambien sirve,
+        pero mete a quien nunca compro, y a ese no se le habla para renovar.
+        """
+        self.assertEqual(self.filtrar('vencida'), ['Vencido'])
 
     def test_al_corriente_excluye_a_los_que_ya_urgen(self):
         self.assertEqual(self.filtrar('al_corriente'), ['Al corriente'])

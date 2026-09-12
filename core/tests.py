@@ -13,7 +13,6 @@ from django.utils import timezone
 from clientes.models import Asistencia, Cliente, ClienteMembresia, Membresia
 from core.models import Gym, Plan, Sucursal
 from core.roles import ADMINISTRADOR
-from core.views import DashboardView
 from inventario.models import (
     CategoriaProducto,
     InventarioSucursal,
@@ -88,12 +87,20 @@ class FlujoCompletoTest(TestCase):
         self.assertEqual(respuesta.context['dentro_ahora'], 1)
         self.assertEqual(respuesta.context['asistencias_hoy'], 2)
 
-    def test_la_salud_de_la_cartera_reparte_a_los_clientes(self):
+    def test_el_tablero_reparte_la_cartera_en_cortes_que_no_se_traslapan(self):
+        """
+        Las dos listas del tablero tienen que ser excluyentes: quien aparece
+        en "por vencer" todavia puede entrar, y quien aparece en "vencidas" ya
+        no. Un socio en las dos significa hablarle dos veces para lo mismo.
+        """
         vigente = Cliente.objects.create(
             gym=self.gym, sucursal=self.sucursal, nombre='Vigente'
         )
         proximo = Cliente.objects.create(
             gym=self.gym, sucursal=self.sucursal, nombre='Por Vencer'
+        )
+        vencido = Cliente.objects.create(
+            gym=self.gym, sucursal=self.sucursal, nombre='Vencido'
         )
         Cliente.objects.create(
             gym=self.gym, sucursal=self.sucursal, nombre='Sin Nada'
@@ -102,32 +109,51 @@ class FlujoCompletoTest(TestCase):
             gym=self.gym, nombre='Mensual', precio=600, duracion_dias=30
         )
         hoy = timezone.localdate()
-        ClienteMembresia.objects.create(
-            gym=self.gym, cliente=vigente, membresia=membresia,
-            inicio=hoy, precio=600,
-        )
-        ClienteMembresia.objects.create(
-            gym=self.gym, cliente=proximo, membresia=membresia,
-            inicio=hoy - timezone.timedelta(days=27), precio=600,
-        )
+        for cliente, atras in ((vigente, 0), (proximo, 27), (vencido, 34)):
+            ClienteMembresia.objects.create(
+                gym=self.gym, cliente=cliente, membresia=membresia,
+                inicio=hoy - timezone.timedelta(days=atras), precio=600,
+            )
 
         ctx = self.client.get(reverse('core:dashboard')).context
 
-        self.assertEqual(ctx['al_corriente'], 1)
+        # Al de 27 dias le quedan 3: entra en el aviso de 5 dias.
         self.assertEqual(ctx['por_vencer_total'], 1)
-        self.assertEqual(ctx['sin_membresia'], 1)
-        self.assertEqual(ctx['salud']['cobertura'], 67)
+        self.assertEqual([cm.cliente for cm in ctx['por_vencer']], [proximo])
+        self.assertEqual(ctx['por_vencer'][0].dias, 3)
 
-    def test_la_grafica_trae_siete_dias_con_coordenadas(self):
+        # Al de 34 se le vencio hace 4. El que nunca compro no esta vencido.
+        self.assertEqual(ctx['vencidos_total'], 1)
+        self.assertEqual([c.pk for c in ctx['vencidos']], [vencido.pk])
+        self.assertEqual(ctx['vencidos'][0].dias_vencida, 4)
+
+        self.assertEqual(ctx['membresias_vigentes'], 2)
+        self.assertEqual(ctx['sin_membresia'], 2)
+        self.assertEqual(ctx['cobertura'], 50)
+
+    def test_las_entradas_de_la_semana_traen_siete_dias(self):
+        cliente = Cliente.objects.create(
+            gym=self.gym, sucursal=self.sucursal, nombre='Constante'
+        )
+        for _ in range(2):
+            Asistencia.objects.create(
+                gym=self.gym, sucursal=self.sucursal, cliente=cliente,
+                tipo=Asistencia.ENTRADA,
+            )
+
         ctx = self.client.get(reverse('core:dashboard')).context
 
-        puntos = ctx['grafica']['puntos']
-        self.assertEqual(len(puntos), 7)
-        self.assertTrue(puntos[-1]['hoy'])
-        # Ningun punto se sale del area dibujable
-        for punto in puntos:
-            self.assertGreaterEqual(punto['y'], DashboardView.TECHO)
-            self.assertLessEqual(punto['y'], DashboardView.PISO)
+        semana = ctx['entradas_semana']
+        self.assertEqual(len(semana), 7)
+        self.assertTrue(semana[-1]['hoy'])
+        self.assertFalse(any(dia['hoy'] for dia in semana[:-1]))
+        self.assertEqual(semana[-1]['valor'], 2)
+        # El dia mas alto llena la barra; uno en cero deja un resto visible
+        # para que se lea "no vino nadie" y no "falta el dato".
+        self.assertEqual(semana[-1]['alto'], 100)
+        self.assertEqual(semana[0]['alto'], 4)
+        self.assertEqual(ctx['asistencias_hoy'], 2)
+        self.assertEqual(ctx['variacion_entradas'], 2)
 
     def test_alta_de_usuario_con_rol(self):
         respuesta = self.client.post(
