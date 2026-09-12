@@ -61,6 +61,20 @@ class FlujoCompletoTest(TestCase):
         respuesta = self.client.get(reverse('core:dashboard'))
         self.assertEqual(respuesta.status_code, 200)
 
+    def test_el_bot_de_telegram_no_sale_en_el_menu(self):
+        """
+        Escondido a proposito: no estaba sumando y el menu se mide por lo que
+        se usa a diario. Sus pantallas siguen en pie, pero no se llega a ellas
+        desde aqui.
+        """
+        cuerpo = self.client.get(reverse('core:dashboard')).content.decode()
+
+        # Que si salga un vecino suyo, o la prueba pasaria igual el dia que se
+        # cayera la seccion de administracion entera.
+        self.assertIn(reverse('core:sitio'), cuerpo)
+        self.assertNotIn(reverse('bot:configuracion'), cuerpo)
+        self.assertNotIn('Telegram', cuerpo)
+
     def test_el_tablero_cuenta_quien_sigue_dentro(self):
         """Sigue dentro quien su ultimo movimiento de hoy fue una entrada."""
         dentro = Cliente.objects.create(

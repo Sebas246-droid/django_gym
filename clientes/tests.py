@@ -1120,10 +1120,19 @@ class AccionesDeLaFichaTest(BaseGymTest):
             reverse('clientes:cliente_credencial', args=[self.cliente.pk]),
             reverse('clientes:cliente_delete', args=[self.cliente.pk]),
             reverse('clientes:asistencia_registrar', args=[self.cliente.pk]),
-            reverse('bot:codigo_vinculacion', args=[self.cliente.pk]),
         ):
             with self.subTest(url=url):
                 self.assertIn(url, self.ficha)
+
+    def test_el_bot_de_telegram_ya_no_se_ofrece(self):
+        """
+        Escondido a proposito: no estaba sumando. Sus pantallas siguen en pie,
+        pero no se llega a ellas desde la ficha.
+        """
+        self.assertNotIn(
+            reverse('bot:codigo_vinculacion', args=[self.cliente.pk]), self.ficha
+        )
+        self.assertNotIn('Telegram', self.ficha)
 
     def test_dar_de_baja_desde_la_ficha_funciona(self):
         """Se movio de la lista al menu: la baja tiene que seguir corriendo."""

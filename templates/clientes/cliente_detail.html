@@ -22,10 +22,6 @@ deja dinero; lo demas se usa de vez en cuando y cabe en el menu.
         <input type="hidden" name="tipo" value="entrada">
         <button type="submit">Registrar entrada</button>
       </form>
-      <form method="post" action="{% url 'bot:codigo_vinculacion' cliente.pk %}">
-        {% csrf_token %}
-        <button type="submit">Codigo de Telegram</button>
-      </form>
       <a href="{% url 'clientes:cliente_delete' cliente.pk %}"
          class="peligro">Dar de baja</a>
     </div>
