@@ -71,9 +71,9 @@
   ensena por debajo de 1000 px; la lateral se esconde. Las dos salen de
   core/menu.py, asi que no se pueden desincronizar.
   {% endcomment %}
-  {% if menu_diario %}
+  {% if user.is_authenticated %}
     <nav class="barra-abajo">
-      {% for entrada in menu_diario %}
+      {% for entrada in menu_barra %}
         <a href="{% url entrada.url %}" class="{% if menu == entrada.clave %}activo{% endif %}">
           {% include 'core/_icono.html' with nombre=entrada.icono %}
           <span>{{ entrada.texto }}</span>
@@ -86,7 +86,13 @@
         </summary>
         <div class="hoja-mas">
           {% include 'core/_menu_enlaces.html' with entradas=menu_ajustes titulo='Ajustes' %}
-          {% include 'core/_menu_enlaces.html' with entradas=menu_plataforma titulo='Plataforma' %}
+          {% comment %}
+          Plataforma solo si no esta ya en la barra: al super administrador del
+          SaaS, que no tiene gimnasio, la barra le sale de ahi.
+          {% endcomment %}
+          {% if menu_diario %}
+            {% include 'core/_menu_enlaces.html' with entradas=menu_plataforma titulo='Plataforma' %}
+          {% endif %}
           <form action="{% url 'accounts:logout' %}" method="post">
             {% csrf_token %}
             <button type="submit" class="btn btn-salir">

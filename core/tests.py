@@ -1,5 +1,7 @@
 """Prueba de humo del flujo completo descrito en el README."""
 
+import csv
+from io import StringIO
 from unittest import skipUnless
 
 from django.contrib.auth import get_user_model
@@ -470,6 +472,175 @@ class TodasLasPantallasAbrenTest(TestCase):
     def test_el_punto_de_venta_queda_marcado_al_ver_el_historial(self):
         respuesta = self.client.get(reverse('ventas:venta_list'))
         self.assertEqual(respuesta.context['menu'], 'pos')
+
+
+class CerrarSesionSiempreAlcanzableTest(TestCase):
+    """
+    En pantalla chica la barra lateral esta escondida, asi que el unico boton
+    de cerrar sesion es el de la hoja de "Mas". Si esa barra no se pinta, el
+    usuario se queda encerrado: le paso al super administrador del SaaS, que no
+    tiene gimnasio y por eso su menu de diario viene vacio.
+    """
+
+    @classmethod
+    def setUpTestData(cls):
+        call_command('init_saas')
+        cls.gym = Gym.objects.create(
+            nombre='Iron House', plan=Plan.objects.get(nombre='Pro')
+        )
+        cls.sucursal = Sucursal.objects.get(gym=cls.gym, nombre='Principal')
+        cls.dueno = User.objects.create_user(
+            username='dueno', password='pass12345',
+            gym=cls.gym, sucursal=cls.sucursal,
+        )
+        cls.dueno.groups.add(Group.objects.get(name=ADMINISTRADOR))
+        # El del SaaS: administra gimnasios y no pertenece a ninguno.
+        cls.saas = User.objects.create_user(
+            username='saas', password='pass12345', is_superuser=True, is_staff=True
+        )
+
+    def barra(self, cuerpo):
+        inicio = cuerpo.find('<nav class="barra-abajo">')
+        return '' if inicio == -1 else cuerpo[inicio:cuerpo.find('</nav>', inicio)]
+
+    def test_el_dueno_del_gimnasio_puede_salir(self):
+        self.client.force_login(self.dueno)
+
+        barra = self.barra(
+            self.client.get(reverse('core:dashboard')).content.decode()
+        )
+
+        self.assertIn(reverse('accounts:logout'), barra)
+
+    def test_el_administrador_del_saas_tambien(self):
+        """Sin gimnasio no hay menu de diario, pero si hay que poder salir."""
+        self.client.force_login(self.saas)
+
+        barra = self.barra(self.client.get(reverse('core:gym_list')).content.decode())
+
+        self.assertIn(reverse('accounts:logout'), barra)
+        # Y su barra lleva a algun lado: las pantallas de plataforma.
+        self.assertIn(reverse('core:gym_list'), barra)
+
+    def test_cerrar_sesion_de_verdad_cierra(self):
+        self.client.force_login(self.saas)
+
+        self.client.post(reverse('accounts:logout'))
+
+        respuesta = self.client.get(reverse('core:gym_list'))
+        self.assertEqual(respuesta.status_code, 302)
+
+
+class GimnasiosDeMuestraTest(TestCase):
+    """
+    El comando que prepara gimnasios para ensenar el sistema a un prospecto.
+    Corre contra la base de verdad, asi que lo que importa es que no se lleve
+    por delante nada de lo que ya hay.
+    """
+
+    def correr(self, **opciones):
+        salida, avisos = StringIO(), StringIO()
+        call_command('crear_demos', stdout=salida, stderr=avisos, **opciones)
+        return list(csv.DictReader(StringIO(salida.getvalue())))
+
+    def test_cada_gimnasio_viene_con_su_administrador_y_con_datos(self):
+        filas = self.correr(cantidad=2)
+
+        self.assertEqual(len(filas), 2)
+        for fila in filas:
+            with self.subTest(gym=fila['gimnasio']):
+                gym = Gym.objects.get(nombre=fila['gimnasio'])
+                admin = User.objects.get(username=fila['usuario'])
+                self.assertEqual(admin.gym, gym)
+                self.assertTrue(admin.check_password(fila['contrasena']))
+                # Sin socios dentro, el tablero se ensena vacio.
+                self.assertTrue(gym.clientes.exists())
+
+    def test_no_pisa_lo_que_ya_existe(self):
+        """Correrlo dos veces no duplica ni reescribe contrasenas."""
+        primera = self.correr(cantidad=2)
+        antes = User.objects.get(username=primera[0]['usuario']).password
+
+        segunda = self.correr(cantidad=2)
+
+        self.assertEqual(segunda, [])
+        self.assertEqual(Gym.objects.count(), 2)
+        self.assertEqual(
+            User.objects.get(username=primera[0]['usuario']).password, antes
+        )
+
+    def test_un_gimnasio_de_verdad_con_ese_nombre_se_respeta(self):
+        call_command('init_saas')  # los planes tienen que existir antes
+        mio = Gym.objects.create(
+            nombre='Iron House', plan=Plan.objects.get(nombre='Premium')
+        )
+
+        self.correr(cantidad=1)
+
+        mio.refresh_from_db()
+        self.assertEqual(mio.plan.nombre, 'Premium')
+        self.assertEqual(Gym.objects.filter(nombre='Iron House').count(), 1)
+
+    def test_nacen_con_la_pagina_publica_apagada(self):
+        """
+        La raiz del dominio lleva al gimnasio solo mientras haya uno publicado.
+        Quince de muestra encendidos dejarian al de verdad fuera de su propia
+        direccion.
+        """
+        self.correr(cantidad=3)
+
+        self.assertFalse(Gym.objects.filter(sitio_publico=True).exists())
+
+    def test_con_sitio_las_publica(self):
+        filas = self.correr(cantidad=1, con_sitio=True)
+
+        self.assertTrue(Gym.objects.get(nombre=filas[0]['gimnasio']).sitio_publico)
+        self.assertIn('/g/', filas[0]['sitio publico'])
+
+    def test_desde_un_csv_crea_esos_y_con_esas_contrasenas(self):
+        """
+        Asi la hoja de credenciales se prepara antes y lo que queda en
+        produccion coincide con ella: si el comando inventara las contrasenas
+        alla, la hoja de aca no serviria para entrar.
+        """
+        import tempfile
+
+        with tempfile.NamedTemporaryFile(
+            'w', suffix='.csv', delete=False, newline='', encoding='utf-8'
+        ) as archivo:
+            archivo.write('gimnasio,plan,usuario,contrasena\n')
+            archivo.write('Sucursal Modelo,Premium,prospecto1,abc123claveXY\n')
+
+        self.correr(desde=archivo.name)
+
+        usuario = User.objects.get(username='prospecto1')
+        self.assertEqual(usuario.gym.nombre, 'Sucursal Modelo')
+        self.assertEqual(usuario.gym.plan.nombre, 'Premium')
+        self.assertTrue(usuario.check_password('abc123claveXY'))
+
+    def test_los_nombres_son_genericos(self):
+        """
+        Un nombre que suene a gimnasio de verdad se confunde con un cliente de
+        verdad en la lista del panel.
+        """
+        filas = self.correr(cantidad=3)
+
+        for fila in filas:
+            with self.subTest(gym=fila['gimnasio']):
+                self.assertTrue(fila['gimnasio'].startswith('Gimnasio Demo'))
+
+    def test_cada_prospecto_ve_solo_lo_suyo(self):
+        filas = self.correr(cantidad=2)
+        primero, segundo = (Gym.objects.get(nombre=f['gimnasio']) for f in filas)
+        self.client.login(
+            username=filas[0]['usuario'], password=filas[0]['contrasena']
+        )
+
+        vistos = self.client.get(reverse('clientes:cliente_list')).context['clientes']
+
+        self.assertTrue(vistos)
+        self.assertEqual({c.gym_id for c in vistos}, {primero.pk})
+        self.assertNotIn(segundo.pk, {c.gym_id for c in vistos})
 
 
 class PlantillasSanasTest(TestCase):

@@ -58,10 +58,18 @@ def _permitidas(entradas, es_admin):
 
 
 def para(usuario, es_admin):
-    """Las tres listas del menu, ya filtradas por lo que puede ver el usuario."""
+    """Las listas del menu, ya filtradas por lo que puede ver el usuario."""
     con_gym = bool(getattr(usuario, 'gym_id', None))
+    diario = _permitidas(DIARIO, es_admin) if con_gym else []
+    ajustes = _permitidas(AJUSTES, es_admin) if con_gym else []
+    plataforma = PLATAFORMA if usuario.is_superuser else []
     return {
-        'menu_diario': _permitidas(DIARIO, es_admin) if con_gym else [],
-        'menu_ajustes': _permitidas(AJUSTES, es_admin) if con_gym else [],
-        'menu_plataforma': PLATAFORMA if usuario.is_superuser else [],
+        'menu_diario': diario,
+        'menu_ajustes': ajustes,
+        'menu_plataforma': plataforma,
+        # Lo que va en la barra de abajo. El super administrador del SaaS no
+        # tiene gimnasio, asi que su diario viene vacio y su barra son las
+        # pantallas de plataforma. Sin esto se quedaba sin barra y, con ella,
+        # sin el unico boton de cerrar sesion que hay en pantalla chica.
+        'menu_barra': diario or plataforma,
     }
