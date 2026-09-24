@@ -509,15 +509,13 @@ button { font-family: inherit; }
   suelto abajo, que se lee como si al ultimo le hubiera pasado algo: se fijan
   los cortes en divisores de seis.
 */
-.tarjetas-tablero { grid-template-columns: repeat(3, 1fr); }
-/* Los seis en fila solo cuando de verdad caben: en una portatil de 1280 la
-   barra lateral se come 248 px y cada tarjeta quedaba en 166, con el rotulo
-   partido en tres renglones. */
-@media (min-width: 1500px) {
-  .tarjetas-tablero { grid-template-columns: repeat(6, 1fr); }
-}
-@media (max-width: 720px) {
-  .tarjetas-tablero { grid-template-columns: repeat(2, 1fr); }
+/*
+  Cuatro tarjetas: de a dos o de a cuatro, nunca una sola colgando abajo, que
+  se lee como si a la ultima le hubiera pasado algo.
+*/
+.tarjetas-tablero { grid-template-columns: repeat(2, 1fr); }
+@media (min-width: 1100px) {
+  .tarjetas-tablero { grid-template-columns: repeat(4, 1fr); }
 }
 
 /*
@@ -563,7 +561,7 @@ button { font-family: inherit; }
 @media (max-width: 1000px) { .rejilla-cobranza { grid-template-columns: 1fr; } }
 
 .tarjeta-cobranza { margin-bottom: 18px; }
-.cobranza-pie { font-size: 12.5px; margin: 0 0 6px; }
+.tarjeta-cobranza .hoja-cabecera { margin-bottom: 10px; }
 
 .fila-lista { list-style: none; margin: 0; padding: 0; }
 .fila-lista li {

@@ -46,10 +46,6 @@
         {{ por_vencer_total }}
       </span>
     </div>
-    <p class="texto-tenue mt0 cobranza-pie">
-      Se les acaba en los proximos {{ dias_aviso }} dias.
-    </p>
-
     {% if por_vencer %}
       <ul class="fila-lista">
         {% for cm in por_vencer %}
@@ -88,10 +84,6 @@
         {{ vencidos_total }}
       </span>
     </div>
-    <p class="texto-tenue mt0 cobranza-pie">
-      Ya no pueden entrar. Las mas recientes primero.
-    </p>
-
     {% if vencidos %}
       <ul class="fila-lista">
         {% for c in vencidos %}
@@ -129,30 +121,24 @@
 
 {# ---------- 3. Los KPIs ---------- #}
 <h2 class="rotulo-seccion">Hoy</h2>
+{% comment %}
+  Cuatro cifras. Eran seis, y dos se repetian: las membresias del dia ya salian
+  en el pie de los ingresos, y "ultimos 7 dias" marcaba lo mismo que hoy en
+  cuanto el movimiento era poco.
+
+  Debajo de cada una va un dato, nunca la definicion de la cifra: lo que explica
+  que es cada cosa se lee una vez en la vida y estorba todas las mananas.
+{% endcomment %}
 <div class="o-tarjetas tarjetas-tablero">
 
   <a href="{% url 'ventas:venta_list' %}" class="o-kpi kpi-enlace">
     <div class="etiqueta">Ingresos de hoy</div>
     <div class="valor">{{ ingresos_hoy|floatformat:0|intcomma }}</div>
     <div class="pie">
-      Mostrador {{ ingreso_mostrador|floatformat:0|intcomma }} &middot;
-      Membresias {{ ingreso_membresias|floatformat:0|intcomma }}
+      {{ membresias_vendidas_hoy }} membresia{{ membresias_vendidas_hoy|pluralize:"s" }}
+      y {{ ventas_hoy }} venta{{ ventas_hoy|pluralize:"s" }}
     </div>
   </a>
-
-  <div class="o-kpi">
-    <div class="etiqueta">Ultimos 7 dias</div>
-    <div class="valor">{{ ingreso_semana|floatformat:0|intcomma }}</div>
-    <div class="pie">{{ ingreso_dia_promedio|intcomma }} al dia en promedio</div>
-  </div>
-
-  <div class="o-kpi">
-    <div class="etiqueta">Membresias hoy</div>
-    <div class="valor">{{ membresias_vendidas_hoy }}</div>
-    <div class="pie">
-      y {{ ventas_hoy }} venta{{ ventas_hoy|pluralize:"s" }} en mostrador
-    </div>
-  </div>
 
   <a href="{% url 'clientes:asistencia_list' %}" class="o-kpi kpi-enlace">
     <div class="etiqueta">Entradas de hoy</div>
@@ -171,14 +157,16 @@
   <div class="o-kpi">
     <div class="etiqueta">En el gimnasio ahora</div>
     <div class="valor">{{ dentro_ahora }}</div>
-    <div class="pie">Su ultimo movimiento de hoy fue una entrada</div>
+    <div class="pie">
+      de {{ asistencias_hoy }} que entr{{ asistencias_hoy|pluralize:"o,aron" }} hoy
+    </div>
   </div>
 
   <a href="{% url 'clientes:cliente_list' %}" class="o-kpi kpi-enlace">
     <div class="etiqueta">Socios activos</div>
     <div class="valor">{{ clientes_total }}</div>
     <div class="pie">
-      {{ membresias_vigentes }} al corriente ({{ cobertura }}%)<br>
+      {{ membresias_vigentes }} al corriente &middot;
       {{ sin_membresia }} sin membresia
     </div>
   </a>

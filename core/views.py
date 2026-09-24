@@ -185,8 +185,6 @@ class DashboardView(GymRequiredMixin, TemplateView):
         ingreso_membresias = sum(
             cm.total for cm in ClienteMembresia.cobradas_aparte(gym, hoy, sede)
         )
-        ctx['ingreso_mostrador'] = ingreso_mostrador
-        ctx['ingreso_membresias'] = ingreso_membresias
         ctx['ingresos_hoy'] = ingreso_mostrador + ingreso_membresias
         ctx['ventas_hoy'] = ventas_hoy.count()
         # Aqui si cuentan todas: es cuantas se vendieron, no cuanto entro.
@@ -196,29 +194,9 @@ class DashboardView(GymRequiredMixin, TemplateView):
             ).exclude(estado='cancelada')
         ).count()
 
-        # Los productos de la semana se suman de un golpe; las membresias van
-        # dia por dia porque hay que dejar fuera las que ya vienen dentro de
-        # una venta, o el ingreso se contaria dos veces.
-        productos_semana = (
-            self._de_la_sede(
-                Venta.objects.filter(
-                    gym=gym, fecha__date__gte=dias[0], estado=Venta.CONFIRMADA
-                )
-            ).aggregate(t=Sum('total'))['t']
-            or 0
-        )
-        ingreso_semana = productos_semana + sum(
-            cm.total
-            for dia in dias
-            for cm in ClienteMembresia.cobradas_aparte(gym, dia, sede)
-        )
-        ctx['ingreso_semana'] = ingreso_semana
-        ctx['ingreso_dia_promedio'] = round(ingreso_semana / len(dias))
-
         ctx['clientes_total'] = total
         ctx['membresias_vigentes'] = vigentes
         ctx['sin_membresia'] = total - vigentes
-        ctx['cobertura'] = round(vigentes * 100 / (total or 1))
 
         # --- 4) Entradas ----------------------------------------------------
         entradas = self._de_la_sede(

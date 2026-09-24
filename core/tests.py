@@ -142,9 +142,9 @@ class FlujoCompletoTest(TestCase):
         self.assertEqual([c.pk for c in ctx['vencidos']], [vencido.pk])
         self.assertEqual(ctx['vencidos'][0].dias_vencida, 4)
 
+        self.assertEqual(ctx['clientes_total'], 4)
         self.assertEqual(ctx['membresias_vigentes'], 2)
         self.assertEqual(ctx['sin_membresia'], 2)
-        self.assertEqual(ctx['cobertura'], 50)
 
     def test_las_entradas_de_la_semana_traen_siete_dias(self):
         cliente = Cliente.objects.create(
