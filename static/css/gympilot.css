@@ -193,11 +193,136 @@ button { font-family: inherit; }
 
 .contenido { padding: 0 34px 44px; flex: 1; }
 
-@media (max-width: 900px) {
-  .app { flex-direction: column; }
-  .lateral { width: 100%; height: auto; position: static; flex: none; }
-  .nav { flex-direction: row; flex-wrap: wrap; }
+/* --- Navegacion en pantalla chica ---------------------------------------- */
+
+/*
+  Debajo de 1000 px la barra lateral estorba mas de lo que ayuda: estirada a lo
+  ancho se convertia en una lista de trece enlaces que habia que pasar de largo
+  para llegar al contenido de cada pantalla. Se esconde y sale una barra de
+  abajo, al alcance del pulgar, con lo de todos los dias y "Mas" para el resto.
+
+  Es tambien lo que hacen los sistemas del oficio: lateral en computadora,
+  barra de abajo en el telefono.
+*/
+.barra-abajo, .barra-arriba { display: none; }
+
+@media (max-width: 999px) {
+  .lateral { display: none; }
+
+  .barra-arriba {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    padding: 10px 18px;
+    background: var(--panel);
+    border-bottom: 1px solid var(--borde);
+  }
+  .barra-arriba .marca { padding: 0; font-size: 14.5px; }
+  .barra-arriba .sede {
+    font-size: 12px;
+    color: var(--tinta-3);
+    white-space: nowrap;
+  }
+
   .cabecera, .contenido { padding-left: 18px; padding-right: 18px; }
+  /* Hueco para que la barra no tape el ultimo boton de la pagina. */
+  .contenido { padding-bottom: calc(76px + env(safe-area-inset-bottom)); }
+
+  .barra-abajo {
+    display: flex;
+    position: fixed;
+    left: 0; right: 0; bottom: 0;
+    z-index: 30;
+    background: var(--panel);
+    border-top: 1px solid var(--borde);
+    padding: 6px 4px calc(6px + env(safe-area-inset-bottom));
+    box-shadow: 0 -6px 20px -14px rgba(11, 11, 15, .5);
+  }
+  .barra-abajo > a,
+  .barra-abajo > .mas > summary {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 3px;
+    padding: 7px 2px 5px;
+    border-radius: var(--r-sm);
+    color: var(--tinta-3);
+    font-size: 11px;
+    font-weight: 550;
+    list-style: none;
+    cursor: pointer;
+    min-width: 0;
+  }
+  .barra-abajo > .mas { flex: 1; display: flex; }
+  .barra-abajo > .mas > summary::-webkit-details-marker { display: none; }
+  .barra-abajo svg { width: 20px; height: 20px; flex: none; }
+  .barra-abajo span {
+    max-width: 100%;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  /* Mismo realce que en la barra lateral: el color del gimnasio puede ser
+     amarillo, y amarillo sobre blanco no se lee. La pastilla marca, el texto
+     en tinta es el que se entiende. */
+  .barra-abajo .activo,
+  .barra-abajo .mas[open] > summary {
+    background: rgba(var(--acento-rgb), .12);
+    color: var(--tinta);
+    font-weight: 600;
+  }
+  .barra-abajo .activo svg { color: var(--acento); }
+
+  /* Cerrada, la hoja seguia ocupando sitio: Chrome le deja caja al contenido
+     de un <details> cerrado y, al estar fija, se plantaba fuera del borde
+     derecho y estiraba la pagina 27 px en el telefono. Se esconde a mano. */
+  .barra-abajo .mas:not([open]) .hoja-mas { display: none; }
+
+  /* Abierta, sube como una hoja por encima de la barra. */
+  .hoja-mas {
+    position: fixed;
+    left: 0; right: 0;
+    bottom: calc(70px + env(safe-area-inset-bottom));
+    max-height: 66vh;
+    overflow-y: auto;
+    background: var(--panel);
+    border-top: 1px solid var(--borde);
+    border-bottom: 1px solid var(--borde);
+    padding: 10px 14px 16px;
+    box-shadow: 0 -18px 40px -24px rgba(11, 11, 15, .55);
+  }
+  .hoja-mas a {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 11px 10px;
+    border-radius: var(--r-sm);
+    color: var(--tinta-2);
+    font-size: 14.5px;
+    font-weight: 500;
+  }
+  .hoja-mas a.activo { background: rgba(var(--acento-rgb), .1); color: var(--tinta); }
+  .hoja-mas svg { width: 18px; height: 18px; flex: 0 0 18px; color: var(--tinta-3); }
+  .hoja-mas .nav-grupo { padding: 12px 10px 4px; }
+  .hoja-mas form { margin-top: 10px; }
+}
+
+/* En el telefono la cabecera aprieta: el titulo y sus botones, sin mas aire. */
+@media (max-width: 620px) {
+  .cabecera { padding-top: 18px; padding-bottom: 14px; }
+  .cabecera h1 { font-size: 21px; }
+  .cabecera-acciones { width: 100%; }
+
+  /*
+    Las filas de cobranza del tablero son nombre + dato + pastilla + accion en
+    una sola linea, y todo sin partir: en un telefono estiraban la pagina. Aqui
+    doblan, y la accion cae debajo en vez de empujar el borde.
+  */
+  .fila-lista li { flex-wrap: wrap; row-gap: 4px; }
+  .fila-lista .quien { max-width: 100%; }
+  .fila-lista .texto-tenue { margin-right: auto; }
 }
 
 /* --- Botones ------------------------------------------------------------- */
@@ -385,7 +510,10 @@ button { font-family: inherit; }
   los cortes en divisores de seis.
 */
 .tarjetas-tablero { grid-template-columns: repeat(3, 1fr); }
-@media (min-width: 1240px) {
+/* Los seis en fila solo cuando de verdad caben: en una portatil de 1280 la
+   barra lateral se come 248 px y cada tarjeta quedaba en 166, con el rotulo
+   partido en tres renglones. */
+@media (min-width: 1500px) {
   .tarjetas-tablero { grid-template-columns: repeat(6, 1fr); }
 }
 @media (max-width: 720px) {

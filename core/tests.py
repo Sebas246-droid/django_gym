@@ -11,6 +11,7 @@ from django.urls import reverse
 from django.utils import timezone
 
 from clientes.models import Asistencia, Cliente, ClienteMembresia, Membresia
+from core import menu
 from core.models import Gym, Plan, Sucursal
 from core.roles import ADMINISTRADOR
 from inventario.models import (
@@ -419,10 +420,52 @@ class TodasLasPantallasAbrenTest(TestCase):
                 )
 
     def test_el_menu_no_ofrece_ventas_como_modulo_aparte(self):
+        """El historial de ventas es una pestana de la caja, no un modulo."""
+        destinos = [e['url'] for e in menu.DIARIO + menu.AJUSTES]
+
+        self.assertIn('ventas:pos', destinos)
+        self.assertNotIn('ventas:venta_list', destinos)
+
+    def test_el_menu_deja_a_la_vista_solo_lo_de_todos_los_dias(self):
+        """
+        Cuatro entradas de diario y el resto detras de 'Ajustes'. Eran trece a
+        la vista: en el telefono habia que pasarlas de largo para llegar al
+        contenido de cada pantalla.
+        """
         cuerpo = self.client.get(reverse('core:dashboard')).content.decode()
-        self.assertIn('Punto de venta', cuerpo)
-        self.assertIn('>Mostrador<', cuerpo)
-        self.assertIn('>Catalogo<', cuerpo)
+
+        self.assertEqual(len(menu.DIARIO), 4)
+        for entrada in menu.DIARIO:
+            with self.subTest(entrada=entrada['texto']):
+                self.assertIn(reverse(entrada['url']), cuerpo)
+        # Lo de configurar sigue llegandose, pero agrupado.
+        self.assertIn('>Ajustes<', cuerpo)
+
+    def test_las_dos_formas_del_menu_llevan_a_lo_mismo(self):
+        """
+        La lateral de computadora y la barra de abajo del telefono salen de la
+        misma lista. Si alguien agrega una pantalla a mano en una sola forma,
+        esto lo caza antes que un usuario.
+        """
+        cuerpo = self.client.get(reverse('core:dashboard')).content.decode()
+
+        lateral = self._trozo(cuerpo, '<nav class="nav">', '</nav>')
+        barra = self._trozo(cuerpo, '<nav class="barra-abajo">', '</nav>')
+        self.assertTrue(lateral and barra, 'faltan las dos formas del menu')
+
+        for entrada in menu.DIARIO:
+            with self.subTest(entrada=entrada['texto']):
+                destino = f'href="{reverse(entrada["url"])}"'
+                self.assertIn(destino, lateral)
+                self.assertIn(destino, barra)
+
+    @staticmethod
+    def _trozo(texto, desde, hasta):
+        inicio = texto.find(desde)
+        if inicio == -1:
+            return ''
+        fin = texto.find(hasta, inicio)
+        return texto[inicio:fin]
 
     def test_el_punto_de_venta_queda_marcado_al_ver_el_historial(self):
         respuesta = self.client.get(reverse('ventas:venta_list'))

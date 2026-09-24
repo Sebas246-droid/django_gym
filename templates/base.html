@@ -37,74 +37,16 @@
       <span class="nombre">{{ gym_actual.nombre|default:'GymPilot' }}</span>
     </a>
 
+    {% comment %}
+    Cuatro entradas de diario y el resto detras de "Mas". Antes eran trece a la
+    vista, agrupadas: en computadora se leen, pero en celular la barra lateral
+    se convierte en una lista de trece enlaces encima de cada pantalla, y habia
+    que pasarlos de largo para llegar al contenido.
+    {% endcomment %}
     <nav class="nav">
-      {% if gym_actual %}
-        <a href="{% url 'core:dashboard' %}" class="{% if menu == 'dashboard' %}activo{% endif %}">
-          {% include 'core/_icono.html' with nombre='tablero' %} Tablero
-        </a>
-        <a href="{% url 'clientes:checkin' %}" class="{% if menu == 'checkin' %}activo{% endif %}">
-          {% include 'core/_icono.html' with nombre='acceso' %} Acceso
-        </a>
-
-        {% comment %}
-        Los grupos separan lo de todos los dias de lo que se toca de vez en
-        cuando. Recepcion vive en Mostrador y casi nunca baja de ahi.
-        {% endcomment %}
-        <div class="nav-grupo">Mostrador</div>
-        <a href="{% url 'clientes:cliente_list' %}" class="{% if menu == 'clientes' %}activo{% endif %}">
-          {% include 'core/_icono.html' with nombre='clientes' %} Clientes
-        </a>
-        {% comment %}
-        El historial de ventas no es un modulo aparte: es la otra pestana de la
-        caja. Quien lo busca viene de cobrar.
-        {% endcomment %}
-        <a href="{% url 'ventas:pos' %}" class="{% if menu == 'pos' %}activo{% endif %}">
-          {% include 'core/_icono.html' with nombre='pos' %} Punto de venta
-        </a>
-        <a href="{% url 'clientes:asistencia_list' %}" class="{% if menu == 'asistencias' %}activo{% endif %}">
-          {% include 'core/_icono.html' with nombre='acceso' %} Asistencias
-        </a>
-
-        <div class="nav-grupo">Catalogo</div>
-        <a href="{% url 'clientes:membresia_list' %}"
-           class="{% if menu == 'membresias' %}activo{% endif %}">
-          {% include 'core/_icono.html' with nombre='membresias' %} Membresias
-        </a>
-        <a href="{% url 'inventario:producto_list' %}" class="{% if menu == 'inventario' %}activo{% endif %}">
-          {% include 'core/_icono.html' with nombre='inventario' %} Inventario
-        </a>
-        <a href="{% url 'entrenamiento:list' %}" class="{% if menu == 'entrenamientos' %}activo{% endif %}">
-          {% include 'core/_icono.html' with nombre='entrenamiento' %} Entrenamientos
-        </a>
-
-        {% if es_admin %}
-          <div class="nav-grupo">Administracion</div>
-          <a href="{% url 'accounts:usuario_list' %}" class="{% if menu == 'staff' %}activo{% endif %}">
-            {% include 'core/_icono.html' with nombre='staff' %} Staff
-          </a>
-          <a href="{% url 'core:sucursal_list' %}" class="{% if menu == 'sucursales' %}activo{% endif %}">
-            {% include 'core/_icono.html' with nombre='sucursales' %} Sucursales
-          </a>
-          <a href="{% url 'core:sitio' %}" class="{% if menu == 'sitio' %}activo{% endif %}">
-            {% include 'core/_icono.html' with nombre='sitio' %} Sitio web
-          </a>
-          {% comment %}
-          El bot de Telegram esta escondido, no borrado: no estaba sumando y un
-          menu se mide por lo que se usa a diario. Sus pantallas siguen en pie
-          en /bot/configuracion/ para poder desconectarlo o volver a ensenarlo.
-          {% endcomment %}
-        {% endif %}
-      {% endif %}
-
-      {% if user.is_superuser %}
-        <div class="nav-grupo">Plataforma</div>
-        <a href="{% url 'core:gym_list' %}" class="{% if menu == 'saas' %}activo{% endif %}">
-          {% include 'core/_icono.html' with nombre='gimnasios' %} Gimnasios
-        </a>
-        <a href="{% url 'core:plan_list' %}" class="{% if menu == 'planes' %}activo{% endif %}">
-          {% include 'core/_icono.html' with nombre='planes' %} Planes
-        </a>
-      {% endif %}
+      {% include 'core/_menu_enlaces.html' with entradas=menu_diario %}
+      {% include 'core/_menu_enlaces.html' with entradas=menu_ajustes titulo='Ajustes' %}
+      {% include 'core/_menu_enlaces.html' with entradas=menu_plataforma titulo='Plataforma' %}
     </nav>
 
     <div class="lateral-pie">
@@ -124,7 +66,60 @@
     </div>
   </aside>
 
+  {% comment %}
+  La misma navegacion con forma de barra de abajo, al alcance del pulgar. Se
+  ensena por debajo de 1000 px; la lateral se esconde. Las dos salen de
+  core/menu.py, asi que no se pueden desincronizar.
+  {% endcomment %}
+  {% if menu_diario %}
+    <nav class="barra-abajo">
+      {% for entrada in menu_diario %}
+        <a href="{% url entrada.url %}" class="{% if menu == entrada.clave %}activo{% endif %}">
+          {% include 'core/_icono.html' with nombre=entrada.icono %}
+          <span>{{ entrada.texto }}</span>
+        </a>
+      {% endfor %}
+      <details class="mas">
+        <summary>
+          {% include 'core/_icono.html' with nombre='ajustes' %}
+          <span>Mas</span>
+        </summary>
+        <div class="hoja-mas">
+          {% include 'core/_menu_enlaces.html' with entradas=menu_ajustes titulo='Ajustes' %}
+          {% include 'core/_menu_enlaces.html' with entradas=menu_plataforma titulo='Plataforma' %}
+          <form action="{% url 'accounts:logout' %}" method="post">
+            {% csrf_token %}
+            <button type="submit" class="btn btn-salir">
+              {% include 'core/_icono.html' with nombre='salir' %} Cerrar sesion
+            </button>
+          </form>
+        </div>
+      </details>
+    </nav>
+  {% endif %}
+
   <div class="principal">
+    {% comment %}
+    Solo en pantalla chica, donde la lateral esta escondida: sin esto no se ve
+    de que gimnasio es el panel, que es justo lo primero que mira quien lo abre
+    en el telefono.
+    {% endcomment %}
+    <header class="barra-arriba">
+      <a href="{% url 'core:dashboard' %}" class="marca">
+        <span class="insignia">
+          {% if gym_actual.logo %}
+            <img src="{{ gym_actual.logo.url }}" alt="">
+          {% else %}
+            {{ gym_actual.nombre.0|default:'G'|upper }}
+          {% endif %}
+        </span>
+        <span class="nombre">{{ gym_actual.nombre|default:'GymPilot' }}</span>
+      </a>
+      {% if sucursal_actual %}
+        <span class="sede">{{ sucursal_actual.nombre }}</span>
+      {% endif %}
+    </header>
+
     <header class="cabecera">
       <div class="titulos">
         <div class="migas">

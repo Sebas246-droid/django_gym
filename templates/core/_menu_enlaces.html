@@ -1,0 +1,15 @@
+{% comment %}
+Los enlaces del menu, pintados desde core/menu.py. Se incluye tanto en la barra
+lateral como en la hoja de "Mas", asi que una pantalla nueva aparece en las dos
+sin acordarse de la otra.
+
+Espera `entradas` y, opcional, `titulo` para el rotulo del grupo.
+{% endcomment %}
+{% if entradas %}
+  {% if titulo %}<div class="nav-grupo">{{ titulo }}</div>{% endif %}
+  {% for entrada in entradas %}
+    <a href="{% url entrada.url %}" class="{% if menu == entrada.clave %}activo{% endif %}">
+      {% include 'core/_icono.html' with nombre=entrada.icono %} {{ entrada.texto }}
+    </a>
+  {% endfor %}
+{% endif %}

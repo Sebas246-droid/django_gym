@@ -1,5 +1,6 @@
 from django.conf import settings
 
+from core import menu as menu_panel
 from core.roles import es_admin, es_entrenador, es_recepcion
 
 # Que entrada del menu se ilumina segun la url actual
@@ -50,12 +51,14 @@ def gym_context(request):
     user = getattr(request, 'user', None)
     if not user or not user.is_authenticated:
         return {'es_local': settings.ES_LOCAL}
+    admin = es_admin(user)
     return {
         'es_local': settings.ES_LOCAL,
         'gym_actual': user.gym,
         'sucursal_actual': user.sucursal,
-        'es_admin': es_admin(user),
+        'es_admin': admin,
         'es_recepcion': es_recepcion(user),
         'es_entrenador': es_entrenador(user),
         'menu': _menu_activo(request),
+        **menu_panel.para(user, admin),
     }
