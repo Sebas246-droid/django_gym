@@ -234,14 +234,26 @@ a { text-decoration: none; color: inherit; }
 */
 .escondida { display: none !important; }
 
-.pantalla-rostro { text-align: center; }
+.pantalla-rostro {
+  text-align: center;
+  display: flex;
+  flex-direction: column;
+  max-height: 100%;
+}
 
+/*
+  El kiosco no hace scroll a proposito, asi que todo tiene que caber: el video
+  se mide contra el alto de la pantalla y no al reves. Sin esto, en un telefono
+  en vertical empujaba el boton del numero fuera de la vista y el socio se
+  quedaba sin salida cuando la camara no lo reconocia.
+*/
 .espejo {
   position: relative;
-  width: 100%;
-  max-width: 420px;
-  margin: 18px auto 14px;
+  height: min(42vh, 380px);
   aspect-ratio: 3 / 4;
+  width: auto;
+  max-width: 100%;
+  margin: 14px auto 12px;
   border-radius: 24px;
   overflow: hidden;
   background: #101016;
@@ -581,6 +593,36 @@ a { text-decoration: none; color: inherit; }
 }
 @media (max-width: 720px) {
   .esquina { position: static; padding: 18px 22px 0; text-align: center; }
+  .escena { height: auto; min-height: 100vh; }
+  body { overflow: auto; }
+
+  /*
+    Aqui la esquina deja de flotar y se lleva 200 px de alto, asi que el video
+    tiene que encoger o el boton del numero queda debajo del borde. La pagina
+    permite desplazar, pero un kiosco donde hay que buscar la salida deslizando
+    es un kiosco roto.
+  */
+  .espejo { height: min(26vh, 240px); margin-top: 8px; }
+
+  /* El reloj y el buscador estorban cuando lo que toca es mirar la camara. */
+  .modo-rostro .esquina { display: none; }
+  .modo-rostro .escena { padding-top: 16px; }
+}
+
+/* Telefono chico de pie: el titulo cede unos pixeles para que el boton entre. */
+@media (max-height: 730px) {
+  .pantalla-rostro .titulo { font-size: clamp(22px, 3.6vh, 30px); }
+  .pantalla-rostro .identidad { margin-bottom: 6px; }
+}
+
+/*
+  Pantalla baja (un telefono acostado): no hay alto que alcance para el kiosco
+  completo. El video se encoge a lo que sea, y ademas se permite desplazar, que
+  es feo pero deja llegar al boton en vez de esconderlo bajo el borde.
+*/
+@media (max-height: 620px) {
+  .espejo { height: min(38vh, 200px); }
+  .pantalla-rostro .titulo { font-size: clamp(20px, 4vh, 28px); }
   .escena { height: auto; min-height: 100vh; }
   body { overflow: auto; }
 }

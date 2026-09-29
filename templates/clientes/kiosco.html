@@ -18,7 +18,13 @@
     }
   </style>
 </head>
-<body>
+{% comment %}
+En modo rostro la esquina del reloj no aporta: el socio viene a que lo vean, no
+a consultar la hora, y en un telefono esos 200 px son la diferencia entre ver
+el boton del numero o no verlo. La clase se quita al pasar al teclado, donde el
+buscador de "no recuerdo mi numero" si hace falta.
+{% endcomment %}
+<body{% if hay_rostros and not resultado and not buscando %} class="modo-rostro"{% endif %}>
 
 <div class="fondo" {% if gym_actual.portada %}style="background-image:url('{{ gym_actual.portada.url }}')"{% endif %}></div>
 
@@ -176,6 +182,7 @@
         </div>
 
         <p class="subtitulo" id="estado-rostro">Encendiendo la camara...</p>
+        {# El titulo ya dice que hacer; aqui va en que anda el sistema. #}
 
         <form method="post" action="{% url 'clientes:checkin_rostro' %}" id="form-rostro">
           {% csrf_token %}
@@ -326,6 +333,7 @@
 
     function alTeclado(porque) {
       buscando = false;
+      document.body.classList.remove('modo-rostro');
       Rostro.apagar(video);
       pantalla.classList.add('escondida');
       teclado.classList.remove('escondida');
@@ -349,7 +357,7 @@
         return;
       }
 
-      estado.textContent = 'Mirate a la camara';
+      estado.textContent = 'Buscandote...';
       const hasta = Date.now() + SEGUNDOS * 1000;
 
       while (buscando && Date.now() < hasta) {

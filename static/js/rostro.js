@@ -51,10 +51,30 @@ window.Rostro = (function () {
     if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
       throw new Error('Este navegador no deja usar la camara.');
     }
-    const senal = await navigator.mediaDevices.getUserMedia({
-      video: { facingMode: 'user', width: 640, height: 480 },
-      audio: false,
-    });
+    /*
+      La camara de enfrente, en serio. 'user' a secas es una preferencia que el
+      telefono puede ignorar —y la ignora: en un celular agarraba la trasera y
+      el socio veia la pared—. Con 'exact' se exige, pero entonces falla donde
+      no hay camara frontal, asi que se va aflojando la peticion hasta que
+      alguna funcione.
+    */
+    const intentos = [
+      { video: { facingMode: { exact: 'user' }, width: 640, height: 480 } },
+      { video: { facingMode: 'user', width: 640, height: 480 } },
+      { video: true },
+    ];
+    let senal = null;
+    let ultimo = null;
+    for (const peticion of intentos) {
+      try {
+        senal = await navigator.mediaDevices.getUserMedia(peticion);
+        break;
+      } catch (error) {
+        ultimo = error;
+      }
+    }
+    if (!senal) { throw ultimo || new Error('No hay camara disponible.'); }
+
     video.srcObject = senal;
 
     /*
