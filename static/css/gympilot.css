@@ -13,6 +13,9 @@
   --panel: #FFFFFF;
   --borde: #ECECF1;
   --borde-fuerte: #DEDEE6;
+  /* Para separar renglones dentro de una tarjeta, donde --borde pesa de mas.
+     Se usaba sin estar definida, asi que esas lineas no se dibujaban. */
+  --borde-suave: #F3F3F7;
   --tinta: #0B0B0F;
   --tinta-2: #43434D;
   --tinta-3: #8A8A99;
@@ -698,6 +701,77 @@ button { font-family: inherit; }
   font-variant-numeric: tabular-nums;
   min-width: 26px;
   text-align: right;
+}
+
+/* --- Datos de acceso de un gimnasio -------------------------------------- */
+
+.lista-copiar { list-style: none; margin: 14px 0 0; padding: 0; }
+.lista-copiar li {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 0;
+  border-bottom: 1px solid var(--borde-suave);
+  font-size: 13.5px;
+}
+.lista-copiar li:last-child { border-bottom: 0; }
+.lista-copiar .rotulo {
+  flex: 0 0 110px;
+  color: var(--tinta-3);
+  font-size: 12.5px;
+}
+/* La pastilla de un dato que esta ahi para copiarse. */
+.lista-copiar code,
+.barra-panel code,
+.o-lista code.usuario {
+  display: inline-block;
+  font-family: var(--mono);
+  font-size: 12.5px;
+  background: #F5F5F8;
+  border: 1px solid var(--borde);
+  border-radius: var(--r-sm);
+  padding: 3px 8px;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  vertical-align: middle;
+}
+.lista-copiar code, .barra-panel code { margin-right: auto; min-width: 0; }
+
+/* La direccion del panel, una sola vez encima de la lista de gimnasios. */
+.barra-panel {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+  padding: 14px 18px;
+}
+.barra-panel .rotulo { color: var(--tinta-3); font-size: 12.5px; }
+
+/* El usuario y su boton, juntos en un renglon mientras quepan. */
+.celda-usuario {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+.lista-copiar .texto-tenue { margin-right: auto; }
+
+/* Solo existe para que el boton de "copiar todo" tenga de donde leer. */
+.solo-para-copiar {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  border: 0;
+  clip-path: inset(50%);
+  overflow: hidden;
+}
+
+@media (max-width: 620px) {
+  .lista-copiar li { flex-wrap: wrap; row-gap: 6px; }
+  .lista-copiar .rotulo { flex-basis: 100%; }
 }
 
 /* --- Tablas -------------------------------------------------------------- */

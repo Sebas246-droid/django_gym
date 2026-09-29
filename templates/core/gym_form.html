@@ -1,0 +1,89 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block title %}{{ titulo|default:'Gimnasio' }} - GymPilot{% endblock %}
+{% block migas %}/ <a href="{% url 'core:gym_list' %}">Gimnasios</a> / <span>{{ titulo }}</span>{% endblock %}
+{% block encabezado %}{{ titulo|default:'Gimnasio' }}{% endblock %}
+
+{% block content %}
+<div class="o-hoja o-hoja-angosta">
+  <form method="post" enctype="multipart/form-data" class="o-form">
+    {% csrf_token %}
+    {{ form.as_p }}
+    <div class="o-form-acciones">
+      <button type="submit" class="btn btn-primario">Guardar</button>
+      <a href="{% url 'core:gym_list' %}" class="btn">Cancelar</a>
+    </div>
+  </form>
+</div>
+
+{% comment %}
+Solo al editar: un gimnasio recien creado todavia no tiene usuario, y ensenar
+el apartado vacio haria pensar que falta algo roto en vez de un paso pendiente.
+{% endcomment %}
+{% if object %}
+  <div class="o-hoja o-hoja-angosta">
+    <div class="hoja-cabecera">
+      <h2>Datos de acceso</h2>
+      {% if administradores %}
+        <button type="button" class="btn btn-primario" data-copiar="#acceso-todo">
+          Copiar todo
+        </button>
+      {% endif %}
+    </div>
+    <p class="texto-tenue mt0">Es lo que se le manda al gimnasio para entrar.</p>
+
+    <ul class="lista-copiar">
+      <li>
+        <span class="rotulo">Panel</span>
+        <code id="acceso-panel">{{ url_panel }}</code>
+        <button type="button" class="btn-enlace" data-copiar="#acceso-panel">Copiar</button>
+      </li>
+
+      {% for admin in administradores %}
+        <li>
+          <span class="rotulo">
+            {% if administradores|length > 1 %}Usuario {{ forloop.counter }}{% else %}Usuario{% endif %}
+          </span>
+          <code id="acceso-usuario-{{ forloop.counter }}">{{ admin.username }}</code>
+          <button type="button" class="btn-enlace"
+                  data-copiar="#acceso-usuario-{{ forloop.counter }}">Copiar</button>
+        </li>
+      {% empty %}
+        <li>
+          <span class="rotulo">Usuario</span>
+          <span class="texto-tenue">Todavia no tiene administrador.</span>
+          <a class="btn-enlace" href="{% url 'accounts:usuario_create' %}">Crear uno</a>
+        </li>
+      {% endfor %}
+
+      <li>
+        <span class="rotulo">Pagina publica</span>
+        {% if object.sitio_publico %}
+          <code id="acceso-sitio">{{ url_sitio }}</code>
+          <button type="button" class="btn-enlace" data-copiar="#acceso-sitio">Copiar</button>
+        {% else %}
+          <span class="texto-tenue">Apagada. Se prende arriba, en "Sitio publico".</span>
+        {% endif %}
+      </li>
+    </ul>
+
+    <p class="nota-vacia">
+      La contrasena no aparece aqui porque el sistema no la guarda, solo su
+      huella. Si se perdio, se le pone una nueva desde Staff.
+    </p>
+
+    {% comment %}
+    El bloque que se copia de un golpe, listo para pegar en un mensaje. Va
+    oculto para no repetir en pantalla lo que ya esta en la lista de arriba.
+    {% endcomment %}
+    <textarea id="acceso-todo" class="solo-para-copiar" readonly aria-hidden="true">{{ object.nombre }}
+Panel: {{ url_panel }}{% for admin in administradores %}
+Usuario: {{ admin.username }}{% endfor %}{% if object.sitio_publico %}
+Pagina: {{ url_sitio }}{% endif %}</textarea>
+  </div>
+
+{% endif %}
+
+<script src="{% static 'js/copiar.js' %}" defer></script>
+{% endblock %}

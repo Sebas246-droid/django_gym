@@ -1,7 +1,8 @@
 from django.contrib import messages
-from django.db.models import Max, Q, Sum
+from django.contrib.auth import get_user_model
+from django.db.models import Count, Max, Prefetch, Q, Sum
 from django.shortcuts import get_object_or_404, redirect
-from django.urls import reverse_lazy
+from django.urls import reverse, reverse_lazy
 from django.utils import timezone
 from django.utils.functional import cached_property
 from django.views.generic import (
@@ -23,6 +24,7 @@ from core.mixins import (
     SuperUserRequiredMixin,
 )
 from core.models import Gym, GymImagen, Plan, Sucursal
+from core.roles import ADMINISTRADOR
 from ventas.models import Venta, VentaDetalle
 
 
@@ -279,10 +281,46 @@ class PlanUpdateView(SuperUserRequiredMixin, UpdateView):
 
 
 class GymListView(SuperUserRequiredMixin, ListView):
+    """
+    Los gimnasios dados de alta, con sus datos de acceso a la mano.
+
+    El usuario administrador de cada uno se trae en una sola consulta y no al
+    pintar cada renglon: con quince gimnasios en pantalla, preguntarlo fila por
+    fila son quince viajes a la base para ensenar un dato.
+    """
+
     model = Gym
     template_name = 'core/gym_list.html'
     context_object_name = 'gyms'
-    queryset = Gym.objects.select_related('plan')
+
+    def get_queryset(self):
+        return (
+            Gym.objects.select_related('plan')
+            .prefetch_related(
+                Prefetch(
+                    'users',
+                    queryset=get_user_model()
+                    .objects.filter(is_active=True, groups__name=ADMINISTRADOR)
+                    .order_by('username'),
+                    to_attr='administradores',
+                )
+            )
+            # Contados aqui y no en la plantilla: un .count por renglon son dos
+            # consultas mas por cada gimnasio de la lista.
+            .annotate(
+                total_sucursales=Count('sucursales', distinct=True),
+                total_usuarios=Count('users', distinct=True),
+            )
+        )
+
+    def get_context_data(self, **kwargs):
+        ctx = super().get_context_data(**kwargs)
+        # La direccion del panel es la misma para todos: va una vez arriba y no
+        # repetida en cada renglon.
+        ctx['url_panel'] = self.request.build_absolute_uri(
+            reverse('accounts:login')
+        )
+        return ctx
 
 
 class GymCreateView(SuperUserRequiredMixin, CreateView):
@@ -303,11 +341,42 @@ class GymCreateView(SuperUserRequiredMixin, CreateView):
 
 
 class GymUpdateView(SuperUserRequiredMixin, UpdateView):
+    """
+    Ademas de editarlo, entrega los datos de acceso listos para copiar.
+
+    Es lo que se le manda a un prospecto o a un cliente nuevo: donde entra y
+    con que usuario. Estaban en la cabeza de quien dio de alta el gimnasio, o
+    en un papel, y se pedian por mensaje cada vez.
+
+    La contrasena no esta ni puede estar: el sistema solo guarda su huella. Si
+    se perdio, se le pone una nueva desde Staff, dentro de ese gimnasio.
+    """
+
     model = Gym
     form_class = GymForm
-    template_name = 'core/form.html'
+    template_name = 'core/gym_form.html'
     success_url = reverse_lazy('core:gym_list')
     extra_context = {'titulo': 'Editar gimnasio'}
+
+    def get_context_data(self, **kwargs):
+        ctx = super().get_context_data(**kwargs)
+        gym = self.object
+        # Absolutas y sacadas de la peticion, no escritas a mano: asi salen
+        # bien en produccion, en local y el dia que cambie el dominio.
+        ctx['url_panel'] = self.request.build_absolute_uri(
+            reverse('accounts:login')
+        )
+        ctx['url_sitio'] = self.request.build_absolute_uri(
+            reverse('core:landing', args=[gym.slug])
+        )
+        ctx['administradores'] = (
+            get_user_model()
+            .objects.filter(
+                gym=gym, is_active=True, groups__name=ADMINISTRADOR
+            )
+            .order_by('username')
+        )
+        return ctx
 
 
 # --- Sucursales del gym ---------------------------------------------------

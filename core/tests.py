@@ -8,6 +8,7 @@ from django.contrib.auth import get_user_model
 from django.contrib.auth.models import Group
 from django.core.management import call_command
 from django.db import connection
+from django.test.utils import CaptureQueriesContext
 from django.test import TestCase, TransactionTestCase
 from django.urls import reverse
 from django.utils import timezone
@@ -641,6 +642,144 @@ class GimnasiosDeMuestraTest(TestCase):
         self.assertTrue(vistos)
         self.assertEqual({c.gym_id for c in vistos}, {primero.pk})
         self.assertNotIn(segundo.pk, {c.gym_id for c in vistos})
+
+
+class ListaDeGimnasiosTest(TestCase):
+    """La lista del panel del SaaS, que es desde donde se reparten accesos."""
+
+    @classmethod
+    def setUpTestData(cls):
+        call_command('init_saas')
+        cls.saas = User.objects.create_user(
+            username='saas', password='pass12345', is_superuser=True, is_staff=True
+        )
+
+    def setUp(self):
+        self.client.force_login(self.saas)
+
+    def crear_gym(self, nombre, usuario):
+        gym = Gym.objects.create(nombre=nombre, plan=Plan.objects.get(nombre='Pro'))
+        admin = User.objects.create_user(
+            username=usuario, password='pass12345',
+            gym=gym, sucursal=Sucursal.objects.get(gym=gym),
+        )
+        admin.groups.add(Group.objects.get(name=ADMINISTRADOR))
+        return gym
+
+    def test_cada_gimnasio_ensena_su_administrador(self):
+        self.crear_gym('Uno', 'dueno_uno')
+        self.crear_gym('Dos', 'dueno_dos')
+
+        cuerpo = self.client.get(reverse('core:gym_list')).content.decode()
+
+        self.assertIn('dueno_uno', cuerpo)
+        self.assertIn('dueno_dos', cuerpo)
+
+    def test_la_direccion_del_panel_va_una_sola_vez(self):
+        """Es la misma para todos: repetirla en cada renglon es ruido."""
+        self.crear_gym('Uno', 'dueno_uno')
+        self.crear_gym('Dos', 'dueno_dos')
+
+        respuesta = self.client.get(reverse('core:gym_list'))
+        cuerpo = respuesta.content.decode()
+
+        self.assertIn(reverse('accounts:login'), respuesta.context['url_panel'])
+        self.assertEqual(cuerpo.count('id="url-panel"'), 1)
+
+    def test_el_que_no_tiene_administrador_lo_dice(self):
+        Gym.objects.create(nombre='Huerfano', plan=Plan.objects.get(nombre='Pro'))
+
+        cuerpo = self.client.get(reverse('core:gym_list')).content.decode()
+
+        self.assertIn('Crear administrador', cuerpo)
+
+    def test_traer_los_administradores_no_cuesta_una_consulta_por_gimnasio(self):
+        """
+        Con quince gimnasios en pantalla, preguntarlo fila por fila son quince
+        viajes a la base para ensenar un dato.
+        """
+        for i in range(2):
+            self.crear_gym(f'Gym {i}', f'dueno{i}')
+
+        with CaptureQueriesContext(connection) as con_dos:
+            self.client.get(reverse('core:gym_list'))
+
+        for i in range(2, 6):
+            self.crear_gym(f'Gym {i}', f'dueno{i}')
+
+        with CaptureQueriesContext(connection) as con_seis:
+            self.client.get(reverse('core:gym_list'))
+
+        self.assertEqual(len(con_dos), len(con_seis))
+
+
+class DatosDeAccesoDelGimnasioTest(TestCase):
+    """
+    Al editar un gimnasio se entregan sus datos de acceso listos para copiar.
+    Es lo que se le manda al cliente cuando se le da de alta, y estaba en la
+    cabeza de quien lo creo.
+    """
+
+    @classmethod
+    def setUpTestData(cls):
+        call_command('init_saas')
+        cls.gym = Gym.objects.create(
+            nombre='Iron House', plan=Plan.objects.get(nombre='Pro')
+        )
+        cls.admin_del_gym = User.objects.create_user(
+            username='dueno_iron', password='pass12345',
+            gym=cls.gym, sucursal=Sucursal.objects.get(gym=cls.gym),
+        )
+        cls.admin_del_gym.groups.add(Group.objects.get(name=ADMINISTRADOR))
+        cls.saas = User.objects.create_user(
+            username='saas', password='pass12345', is_superuser=True, is_staff=True
+        )
+
+    def editar(self):
+        return self.client.get(reverse('core:gym_update', args=[self.gym.pk]))
+
+    def test_trae_la_direccion_del_panel_y_el_usuario(self):
+        self.client.force_login(self.saas)
+
+        respuesta = self.editar()
+        cuerpo = respuesta.content.decode()
+
+        self.assertIn(reverse('accounts:login'), respuesta.context['url_panel'])
+        self.assertIn('dueno_iron', cuerpo)
+        self.assertIn('Copiar todo', cuerpo)
+
+    def test_la_contrasena_no_esta_ni_puede_estar(self):
+        """Solo se guarda su huella. Ensenarla seria imposible y mentiroso."""
+        self.client.force_login(self.saas)
+
+        cuerpo = self.editar().content.decode()
+
+        self.assertNotIn(self.admin_del_gym.password, cuerpo)
+        self.assertIn('no la guarda', cuerpo)
+
+    def test_sin_administrador_lo_dice_y_ofrece_crearlo(self):
+        self.admin_del_gym.groups.clear()
+        self.client.force_login(self.saas)
+
+        cuerpo = self.editar().content.decode()
+
+        self.assertIn('Todavia no tiene administrador', cuerpo)
+        self.assertIn(reverse('accounts:usuario_create'), cuerpo)
+
+    def test_la_pagina_publica_solo_sale_si_esta_prendida(self):
+        Gym.objects.filter(pk=self.gym.pk).update(sitio_publico=False)
+        self.client.force_login(self.saas)
+
+        cuerpo = self.editar().content.decode()
+
+        self.assertNotIn(reverse('core:landing', args=[self.gym.slug]), cuerpo)
+        self.assertIn('Apagada', cuerpo)
+
+    def test_un_administrador_de_gimnasio_no_entra_aqui(self):
+        """El alta de gimnasios es del SaaS, no de un cliente."""
+        self.client.force_login(self.admin_del_gym)
+
+        self.assertNotEqual(self.editar().status_code, 200)
 
 
 class PlantillasSanasTest(TestCase):
