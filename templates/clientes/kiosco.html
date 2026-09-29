@@ -193,31 +193,39 @@
       <button type="submit" class="principal-btn" id="enviar" disabled>Registrar entrada</button>
     </form>
 
-    {% if hay_huellas %}
+    {% if hay_rostros %}
       {% comment %}
-      Va fuera del teclado porque son dos envios distintos. Con el lector de
-      verdad este boton sobra: el agente avisa solo en cuanto lee el dedo.
+      Va fuera del teclado porque son dos envios distintos. El teclado no se
+      quita nunca: si la luz esta mal o la camara falla, el numero funciona.
       {% endcomment %}
-      <form method="post" action="{% url 'clientes:checkin_huella' %}" class="huella">
+      <form method="post" action="{% url 'clientes:checkin_rostro' %}" class="rostro"
+            id="form-rostro">
         {% csrf_token %}
-        <button type="submit">
+        <input type="hidden" name="descriptor" id="campo-descriptor">
+        <button type="button" id="boton-rostro">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"
                stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-            <path d="M12 11v3a9 9 0 0 1-.7 3.5"/>
-            <path d="M8.5 10.5a3.5 3.5 0 0 1 7 0V14a13 13 0 0 1-.5 3.5"/>
-            <path d="M5 10.5a7 7 0 0 1 14 0V14a17 17 0 0 1-.4 3.6"/>
-            <path d="M8.6 20.5A16 16 0 0 0 10 14v-3.5"/>
-            <path d="M3.5 7.5a10 10 0 0 1 17 0"/>
+            <path d="M4 8V6a2 2 0 0 1 2-2h2"/><path d="M16 4h2a2 2 0 0 1 2 2v2"/>
+            <path d="M20 16v2a2 2 0 0 1-2 2h-2"/><path d="M8 20H6a2 2 0 0 1-2-2v-2"/>
+            <circle cx="9.5" cy="10.5" r="1"/><circle cx="14.5" cy="10.5" r="1"/>
+            <path d="M9 15a4 4 0 0 0 6 0"/>
           </svg>
-          O entra con tu huella
+          <span id="texto-rostro">O entra con tu rostro</span>
         </button>
       </form>
+      <video id="camara-kiosco" playsinline muted></video>
     {% endif %}
+
   {% endif %}
 
 </div>
 
 <a href="{% url 'core:dashboard' %}" class="salida">Salir del modo kiosco</a>
+
+{% if hay_rostros %}
+<script src="{% static 'vendor/face-api/face-api.min.js' %}"></script>
+<script src="{% static 'js/rostro.js' %}"></script>
+{% endif %}
 
 <script>
   // Reloj
@@ -286,6 +294,50 @@
 
     pintar();
   }
+
+  // Entrada por rostro. El modelo corre aqui y del servidor solo se recibe el
+  // veredicto: la foto no sale de esta tablet.
+  {% if hay_rostros %}
+  (function () {
+    const boton = document.querySelector('#boton-rostro');
+    const texto = document.querySelector('#texto-rostro');
+    const video = document.querySelector('#camara-kiosco');
+    const campo = document.querySelector('#campo-descriptor');
+
+    boton.addEventListener('click', async function () {
+      boton.disabled = true;
+      try {
+        texto.textContent = 'Cargando...';
+        await Rostro.cargar("{% static 'vendor/face-api/model/' %}");
+
+        texto.textContent = 'Mira a la camara';
+        await Rostro.encender(video);
+        // Un respiro para que la camara ajuste la luz: la primera imagen
+        // suele salir oscura y ahi no se reconoce a nadie.
+        await new Promise(function (listo) { setTimeout(listo, 700); });
+
+        let descriptor = null;
+        for (let intento = 0; intento < 3 && !descriptor; intento += 1) {
+          descriptor = await Rostro.describir(video);
+        }
+        Rostro.apagar(video);
+
+        if (!descriptor) {
+          texto.textContent = 'No te vi. Acercate o teclea tu numero';
+          boton.disabled = false;
+          return;
+        }
+
+        campo.value = JSON.stringify(descriptor);
+        document.querySelector('#form-rostro').submit();
+      } catch (error) {
+        Rostro.apagar(video);
+        texto.textContent = 'La camara no respondio. Teclea tu numero';
+        boton.disabled = false;
+      }
+    });
+  })();
+  {% endif %}
 
   // Tras mostrar el veredicto la pantalla vuelve sola al teclado
   {% if resultado %}

@@ -58,6 +58,14 @@ urlpatterns = [
     ),
 
     path(
+        '<int:pk>/rostro/', views.RostroEnrolarView.as_view(), name='rostro_enrolar'
+    ),
+    path(
+        '<int:pk>/rostro/borrar/',
+        views.RostroBorrarView.as_view(),
+        name='rostro_borrar',
+    ),
+    path(
         '<int:pk>/huella/', views.HuellaEnrolarView.as_view(), name='huella_enrolar'
     ),
     path(
@@ -68,6 +76,9 @@ urlpatterns = [
 
     path('asistencias/', views.AsistenciaListView.as_view(), name='asistencia_list'),
     path('acceso/', views.CheckinView.as_view(), name='checkin'),
+    path(
+        'acceso/rostro/', views.CheckinRostroView.as_view(), name='checkin_rostro'
+    ),
     path(
         'acceso/huella/', views.CheckinHuellaView.as_view(), name='checkin_huella'
     ),

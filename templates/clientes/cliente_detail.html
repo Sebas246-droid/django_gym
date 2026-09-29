@@ -94,39 +94,37 @@ deja dinero; lo demas se usa de vez en cuando y cabe en el menu.
       </tbody>
     </table>
 
-    <h3>Huellas</h3>
-    <p class="texto-tenue mt0" style="font-size:12px">
-      Con la huella entra sin teclear su numero. El numero sigue funcionando
-      siempre, por si el lector falla.
-    </p>
+    {% comment %}
+    El apartado de huellas esta escondido, no borrado: el lector no esta en uso
+    y enrolar un dedo que nadie va a leer solo pide un dato sensible de mas.
+    El codigo y lo ya enrolado siguen en su sitio.
+    {% endcomment %}
 
-    {% if cliente.huellas.all %}
-      <ul class="lista-huellas">
-        {% for h in cliente.huellas.all %}
-          <li>
-            <span class="dedo">{{ h.get_dedo_display }}</span>
-            <span class="texto-tenue">Calidad {{ h.calidad }}</span>
-            <form method="post" action="{% url 'clientes:huella_borrar' h.pk %}">
-              {% csrf_token %}
-              <button type="submit" class="btn-enlace">Quitar</button>
-            </form>
-          </li>
-        {% endfor %}
-      </ul>
+    <h3>Entrar con el rostro</h3>
+    {% if cliente.rostros.exists %}
+      <p class="texto-tenue mt0" style="font-size:12px">
+        Enrolado el
+        {{ cliente.consentimiento_rostro.aceptado_en|date:"d/m/Y" }}, con su
+        firma. Su numero sigue funcionando siempre.
+      </p>
+      <div class="o-form-acciones">
+        <a href="{% url 'clientes:rostro_enrolar' cliente.pk %}" class="btn">
+          Volver a capturar
+        </a>
+        <form method="post" action="{% url 'clientes:rostro_borrar' cliente.pk %}">
+          {% csrf_token %}
+          <button type="submit" class="btn btn-peligro">Borrar su rostro</button>
+        </form>
+      </div>
     {% else %}
-      <p class="texto-tenue">Sin huellas registradas.</p>
+      <p class="texto-tenue mt0" style="font-size:12px">
+        Entra sin teclear su numero. Hace falta que firme la autorizacion: el
+        rostro es un dato personal sensible.
+      </p>
+      <a href="{% url 'clientes:rostro_enrolar' cliente.pk %}" class="btn">
+        Enrolar rostro
+      </a>
     {% endif %}
-
-    <form method="post" action="{% url 'clientes:huella_enrolar' cliente.pk %}"
-          class="o-form">
-      {% csrf_token %}
-      <select name="dedo" aria-label="Dedo a enrolar">
-        {% for valor, etiqueta in dedos %}
-          <option value="{{ valor }}">{{ etiqueta }}</option>
-        {% endfor %}
-      </select>
-      <button type="submit" class="btn">Enrolar huella</button>
-    </form>
   </div>
 
   <div>

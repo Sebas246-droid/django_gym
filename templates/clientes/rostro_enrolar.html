@@ -1,0 +1,167 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block title %}Enrolar rostro - GymPilot{% endblock %}
+{% block migas %}
+  / <a href="{% url 'clientes:cliente_list' %}">Clientes</a>
+  / <a href="{% url 'clientes:cliente_detail' cliente.pk %}">{{ cliente.nombre }}</a>
+  / <span>Rostro</span>
+{% endblock %}
+{% block encabezado %}Entrar con el rostro{% endblock %}
+
+{% block content %}
+<form method="post" id="form-rostro" class="rejilla-rostro">
+  {% csrf_token %}
+  <input type="hidden" name="firma" id="campo-firma">
+  <input type="hidden" name="descriptores" id="campo-descriptores">
+
+  {% comment %}
+  El orden de la pantalla es el orden de la ley: primero lee y firma, despues
+  se enciende la camara. El boton de capturar nace apagado.
+  {% endcomment %}
+  <section class="o-hoja">
+    <h2>1. Lo que acepta {{ cliente.nombre }}</h2>
+    <pre class="aviso-legal">{{ aviso }}</pre>
+
+    <h3>Su firma</h3>
+    <p class="texto-tenue mt0">Que firme con el dedo en la pantalla.</p>
+    <canvas id="firma" class="tabla-firma" width="560" height="180"></canvas>
+    <div class="o-form-acciones">
+      <button type="button" class="btn" id="limpiar-firma">Borrar y repetir</button>
+    </div>
+  </section>
+
+  <section class="o-hoja">
+    <h2>2. Su rostro</h2>
+
+    {% if ya_enrolado %}
+      <p class="pill pill-ok">Ya tiene {{ ya_enrolado }} toma{{ ya_enrolado|pluralize:"s" }} guardadas</p>
+      <p class="texto-tenue">Volver a capturar reemplaza las anteriores.</p>
+    {% endif %}
+
+    <div class="marco-camara">
+      <video id="camara" playsinline muted></video>
+      <p class="estado" id="estado">Primero la firma.</p>
+    </div>
+
+    <div class="o-form-acciones">
+      <button type="button" class="btn btn-primario" id="capturar" disabled>
+        Encender camara y capturar
+      </button>
+      <a href="{% url 'clientes:cliente_detail' cliente.pk %}" class="btn">Cancelar</a>
+    </div>
+
+    <p class="nota-vacia">
+      Se toman {{ tomas }} fotos seguidas y de cada una se sacan 128 numeros. Las
+      fotos no se guardan ni salen de esta tablet: al servidor solo viajan los
+      numeros.
+    </p>
+  </section>
+</form>
+
+<script src="{% static 'vendor/face-api/face-api.min.js' %}"></script>
+<script src="{% static 'js/rostro.js' %}"></script>
+<script>
+  (function () {
+    const MODELOS = "{% static 'vendor/face-api/model/' %}";
+    const TOMAS = {{ tomas }};
+
+    const lienzo = document.querySelector('#firma');
+    const pincel = lienzo.getContext('2d');
+    const campoFirma = document.querySelector('#campo-firma');
+    const campoDescriptores = document.querySelector('#campo-descriptores');
+    const boton = document.querySelector('#capturar');
+    const estado = document.querySelector('#estado');
+    const video = document.querySelector('#camara');
+    let firmado = false;
+
+    // --- La firma ------------------------------------------------------
+    pincel.lineWidth = 2.5;
+    pincel.lineCap = 'round';
+    pincel.strokeStyle = '#0b0b0f';
+    let trazando = false;
+
+    function donde(evento) {
+      const caja = lienzo.getBoundingClientRect();
+      const punto = evento.touches ? evento.touches[0] : evento;
+      return {
+        x: (punto.clientX - caja.left) * (lienzo.width / caja.width),
+        y: (punto.clientY - caja.top) * (lienzo.height / caja.height),
+      };
+    }
+
+    function empezar(evento) {
+      evento.preventDefault();
+      trazando = true;
+      const p = donde(evento);
+      pincel.beginPath();
+      pincel.moveTo(p.x, p.y);
+    }
+
+    function seguir(evento) {
+      if (!trazando) { return; }
+      evento.preventDefault();
+      const p = donde(evento);
+      pincel.lineTo(p.x, p.y);
+      pincel.stroke();
+      if (!firmado) {
+        firmado = true;
+        boton.disabled = false;
+        estado.textContent = 'Listo. Ahora enciende la camara.';
+      }
+    }
+
+    function soltar() { trazando = false; }
+
+    ['mousedown', 'touchstart'].forEach(function (e) {
+      lienzo.addEventListener(e, empezar, { passive: false });
+    });
+    ['mousemove', 'touchmove'].forEach(function (e) {
+      lienzo.addEventListener(e, seguir, { passive: false });
+    });
+    ['mouseup', 'mouseleave', 'touchend'].forEach(function (e) {
+      lienzo.addEventListener(e, soltar);
+    });
+
+    document.querySelector('#limpiar-firma').addEventListener('click', function () {
+      pincel.clearRect(0, 0, lienzo.width, lienzo.height);
+      firmado = false;
+      boton.disabled = true;
+      estado.textContent = 'Primero la firma.';
+    });
+
+    // --- La camara -----------------------------------------------------
+    boton.addEventListener('click', async function () {
+      boton.disabled = true;
+      try {
+        estado.textContent = 'Cargando el modelo, la primera vez tarda...';
+        await Rostro.cargar(MODELOS);
+
+        estado.textContent = 'Encendiendo la camara...';
+        await Rostro.encender(video);
+
+        const sacadas = await Rostro.tomas(video, TOMAS, function (van, total) {
+          estado.textContent = `Mirando a la camara... toma ${van} de ${total}`;
+        });
+
+        Rostro.apagar(video);
+
+        if (!sacadas.length) {
+          estado.textContent = 'No se vio ninguna cara. Acercate y repite.';
+          boton.disabled = false;
+          return;
+        }
+
+        campoFirma.value = lienzo.toDataURL('image/png');
+        campoDescriptores.value = JSON.stringify(sacadas);
+        estado.textContent = `${sacadas.length} tomas listas. Guardando...`;
+        document.querySelector('#form-rostro').submit();
+      } catch (error) {
+        Rostro.apagar(video);
+        estado.textContent = 'No se pudo usar la camara: ' + error.message;
+        boton.disabled = false;
+      }
+    });
+  })();
+</script>
+{% endblock %}

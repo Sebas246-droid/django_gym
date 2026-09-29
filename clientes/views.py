@@ -1,6 +1,10 @@
+import base64
+import json
 from datetime import timedelta
 
 from django.contrib import messages
+from django.core.files.base import ContentFile
+from django.db import transaction
 from django.db.models import Q
 from django.http import HttpResponse
 from django.shortcuts import get_object_or_404, redirect
@@ -16,9 +20,17 @@ from django.views.generic import (
     View,
 )
 
-from clientes import credencial, lectores
+from clientes import credencial, lectores, rostros
 from clientes.forms import ClienteForm, ClienteMembresiaForm, MembresiaForm
-from clientes.models import Asistencia, Cliente, ClienteMembresia, Huella, Membresia
+from clientes.models import (
+    Asistencia,
+    Cliente,
+    ClienteMembresia,
+    ConsentimientoRostro,
+    Huella,
+    Membresia,
+    Rostro,
+)
 from core.mixins import GymFormMixin, GymQuerysetMixin, GymRequiredMixin, SoftDeleteView
 from entrenamiento.models import Entrenamiento
 
@@ -357,6 +369,12 @@ class CheckinView(GymRequiredMixin, TemplateView):
 
         # El boton de huella solo aparece si alguien la tiene enrolada: en un
         # gimnasio sin lector no debe salir nada.
+        # El boton de rostro solo aparece si alguien lo tiene enrolado: en un
+        # gimnasio que no lo usa no debe salir nada.
+        ctx['hay_rostros'] = Rostro.objects.filter(
+            gym=self.gym, activo=True, cliente__activo=True
+        ).exists()
+
         ctx['hay_huellas'] = Huella.objects.filter(
             gym=self.gym, activo=True, cliente__activo=True
         ).exists()
@@ -536,6 +554,163 @@ class AsistenciaRegistrarView(GymRequiredMixin, View):
             request.POST.get('entrenamiento') or None,
         )
         return redirect('clientes:checkin')
+
+
+# --- Acceso por rostro ----------------------------------------------------
+
+
+class RostroEnrolarView(GymRequiredMixin, DetailView):
+    """
+    Enrola el rostro de un socio: primero su firma, despues su cara.
+
+    El orden no es un detalle de la pantalla. El rostro es un dato personal
+    sensible y no se puede capturar sin que el socio haya aceptado antes, asi
+    que el POST rechaza la captura si no viene firmada.
+
+    De la camara solo llega el descriptor. La foto se queda en el navegador.
+    """
+
+    model = Cliente
+    template_name = 'clientes/rostro_enrolar.html'
+    context_object_name = 'cliente'
+    #: Cuantas tomas se piden. Tres angulos reconocen mejor que una de frente.
+    TOMAS = 3
+
+    def get_queryset(self):
+        return Cliente.objects.filter(gym=self.gym, activo=True)
+
+    def get_context_data(self, **kwargs):
+        ctx = super().get_context_data(**kwargs)
+        ctx['aviso'] = rostros.AVISO.format(gym=self.gym.nombre)
+        ctx['tomas'] = self.TOMAS
+        ctx['ya_enrolado'] = self.object.rostros.filter(activo=True).count()
+        return ctx
+
+    def post(self, request, pk):
+        cliente = self.get_object()
+        firma = request.POST.get('firma', '')
+        try:
+            descriptores = json.loads(request.POST.get('descriptores', '[]'))
+        except json.JSONDecodeError:
+            descriptores = []
+
+        if not firma.startswith('data:image/png;base64,'):
+            messages.error(request, 'Falta la firma del socio.')
+            return redirect('clientes:rostro_enrolar', pk=pk)
+
+        if not descriptores:
+            messages.error(request, 'No se capturo ningun rostro.')
+            return redirect('clientes:rostro_enrolar', pk=pk)
+
+        try:
+            limpios = [rostros.limpiar(d) for d in descriptores]
+        except rostros.DescriptorInvalido as error:
+            messages.error(request, f'La captura llego mal: {error}')
+            return redirect('clientes:rostro_enrolar', pk=pk)
+
+        # Si esa cara ya es de otro socio, enrolarla dejaria entrar al que la
+        # comparacion encuentre primero, y los dos con el nombre equivocado.
+        for descriptor in limpios:
+            ajeno, _ = rostros.buscar(self.gym, descriptor)
+            if ajeno and ajeno.pk != cliente.pk:
+                messages.error(
+                    request,
+                    f'Ese rostro ya esta enrolado a nombre de {ajeno.nombre}.',
+                )
+                return redirect('clientes:rostro_enrolar', pk=pk)
+
+        with transaction.atomic():
+            ConsentimientoRostro.objects.update_or_create(
+                cliente=cliente,
+                defaults={
+                    'gym': self.gym,
+                    'firma': self._firma_a_archivo(firma, cliente),
+                    'texto': rostros.AVISO.format(gym=self.gym.nombre),
+                    'usuario': request.user,
+                },
+            )
+            cliente.rostros.all().delete()
+            Rostro.objects.bulk_create([
+                Rostro(gym=self.gym, cliente=cliente, descriptor=d,
+                       usuario=request.user)
+                for d in limpios
+            ])
+
+        messages.success(
+            request,
+            f'{cliente.nombre} ya puede entrar con su rostro '
+            f'({len(limpios)} toma{"s" if len(limpios) != 1 else ""}).',
+        )
+        return redirect('clientes:cliente_detail', pk=pk)
+
+    @staticmethod
+    def _firma_a_archivo(dato, cliente):
+        contenido = base64.b64decode(dato.split(',', 1)[1])
+        return ContentFile(contenido, name=f'firma-{cliente.pk}.png')
+
+
+class RostroBorrarView(GymRequiredMixin, View):
+    """
+    Borra el rostro de un socio y su consentimiento.
+
+    Existe porque la ley da derecho a arrepentirse, y porque de nada sirve
+    pedir permiso si despues no se puede retirar. Borra las dos cosas juntas:
+    un consentimiento sin rostros no dice nada, y rostros sin consentimiento no
+    se pueden tener.
+    """
+
+    def post(self, request, pk):
+        cliente = get_object_or_404(Cliente, pk=pk, gym=request.user.gym)
+        cliente.rostros.all().delete()
+        ConsentimientoRostro.objects.filter(cliente=cliente).delete()
+        messages.success(
+            request,
+            f'Se borro el rostro de {cliente.nombre}. Vuelve a entrar con su '
+            'numero.',
+        )
+        return redirect('clientes:cliente_detail', pk=pk)
+
+
+class CheckinRostroView(CheckinView):
+    """
+    Entrada por rostro: el mismo kiosco, sin teclear el numero.
+
+    Hereda de CheckinView para reusar tal cual el veredicto y el registro de
+    asistencia. Lo unico que cambia es como se averigua quien es la persona, y
+    eso tiene que dar el mismo resultado que tecleando el numero.
+    """
+
+    def post(self, request, *args, **kwargs):
+        tipo = request.POST.get('tipo', Asistencia.ENTRADA)
+        request.session['acceso'] = self._resolver_rostro(tipo)
+        return redirect('clientes:checkin')
+
+    def _resolver_rostro(self, tipo):
+        try:
+            descriptor = rostros.limpiar(
+                json.loads(self.request.POST.get('descriptor', 'null'))
+            )
+        except (json.JSONDecodeError, TypeError, rostros.DescriptorInvalido):
+            return {
+                'estado': 'invalido',
+                'titulo': 'No se pudo leer tu cara',
+                'mensaje': 'Acercate un poco y que te de la luz de frente.',
+                'detalle': 'O teclea tu numero, que siempre funciona.',
+            }
+
+        cliente, distancia = rostros.buscar(self.gym, descriptor)
+        if not cliente:
+            return {
+                'estado': 'invalido',
+                'titulo': 'No te reconoci',
+                'mensaje': (
+                    'Puede ser la luz, los lentes o que todavia no hayas '
+                    'enrolado tu rostro en recepcion.'
+                ),
+                'detalle': 'Teclea tu numero para entrar.',
+            }
+
+        return self._veredicto(cliente, tipo, None)
 
 
 # --- Acceso por huella ----------------------------------------------------

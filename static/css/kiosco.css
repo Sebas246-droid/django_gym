@@ -222,6 +222,33 @@ a { text-decoration: none; color: inherit; }
 }
 .secundario:hover { color: rgba(255, 255, 255, .82); }
 
+/* --- Entrada por rostro --------------------------------------------------- */
+
+/*
+  Mismo trato que el de huella: un boton secundario debajo del teclado. El
+  teclado manda, esto es el atajo.
+*/
+.rostro { margin-top: 16px; text-align: center; }
+.rostro button {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  padding: 12px 22px;
+  border-radius: 999px;
+  border: 1px solid rgba(255, 255, 255, .16);
+  background: rgba(255, 255, 255, .05);
+  color: rgba(255, 255, 255, .8);
+  font: inherit;
+  font-size: 15px;
+  cursor: pointer;
+}
+.rostro button:hover { background: rgba(255, 255, 255, .1); color: #fff; }
+.rostro button:disabled { opacity: .6; cursor: default; }
+.rostro svg { width: 24px; height: 24px; color: var(--acento); }
+
+/* La camara trabaja sin verse: el socio mira la pantalla, no su propia cara. */
+#camara-kiosco { position: absolute; width: 1px; height: 1px; opacity: 0; }
+
 /* --- Entrada por huella --------------------------------------------------- */
 
 .huella { margin-top: 16px; text-align: center; }

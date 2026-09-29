@@ -242,6 +242,78 @@ class Huella(GymModel):
         return f'{self.cliente} - {self.get_dedo_display()}'
 
 
+class ConsentimientoRostro(GymModel):
+    """
+    La autorizacion del socio para que el gimnasio use su rostro al entrar.
+
+    El rostro es dato personal sensible, y la ley mexicana pide consentimiento
+    expreso y por escrito antes de tocarlo. Por eso no es papeleo alrededor de
+    la funcion: sin esta firma no se puede enrolar una cara, y borrarla borra
+    tambien los rostros guardados.
+
+    Se conserva el texto exacto que se acepto, no una referencia al aviso: el
+    aviso se puede reescribir manana, y lo que hay que poder probar es que
+    firmo esto y no otra cosa.
+    """
+
+    cliente = models.OneToOneField(
+        Cliente, on_delete=models.CASCADE, related_name='consentimiento_rostro'
+    )
+    firma = models.ImageField(
+        upload_to=RutaPorGym('consentimientos'),
+        help_text='El trazo que el socio hizo en la pantalla.',
+    )
+    texto = models.TextField(help_text='El aviso tal como se le enseño.')
+    aceptado_en = models.DateTimeField(default=timezone.now)
+    usuario = models.ForeignKey(
+        'accounts.User',
+        on_delete=models.PROTECT,
+        related_name='consentimientos_tomados',
+        null=True,
+        help_text='Quien lo capturo, por si despues hay que preguntarle.',
+    )
+
+    class Meta:
+        verbose_name = 'Consentimiento de rostro'
+        verbose_name_plural = 'Consentimientos de rostro'
+
+    def __str__(self):
+        return f'Consentimiento de {self.cliente}'
+
+
+class Rostro(GymModel):
+    """
+    Una captura del rostro de un socio, para que entre sin teclear su numero.
+
+    Se guarda el *descriptor*: los 128 numeros con los que el modelo describe
+    una cara. No es la foto ni se puede volver a convertir en ella, igual que
+    la plantilla de la huella. La foto nunca sale del navegador.
+
+    Hay varias por socio a proposito: tres tomas desde angulos distintos
+    reconocen mejor que un promedio de las tres, que acaba pareciendose a
+    todos y a ninguno.
+    """
+
+    cliente = models.ForeignKey(
+        Cliente, on_delete=models.CASCADE, related_name='rostros'
+    )
+    descriptor = models.JSONField(editable=False)
+    usuario = models.ForeignKey(
+        'accounts.User',
+        on_delete=models.PROTECT,
+        related_name='rostros_enrolados',
+        null=True,
+    )
+
+    class Meta:
+        ordering = ['-created_at']
+        verbose_name = 'Rostro'
+        verbose_name_plural = 'Rostros'
+
+    def __str__(self):
+        return f'Rostro de {self.cliente}'
+
+
 class ClienteMembresia(GymModel):
     """Historial completo de compras de membresias (incluye el cobro)."""
 

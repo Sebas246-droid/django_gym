@@ -185,14 +185,13 @@ class Command(BaseCommand):
 
         self.catalogo_demo(gym, sucursal)
 
+        # Dos personas, no seis. Con dos ya se enseñan las dos listas de arriba
+        # del tablero, que es lo que se mira primero, y quedan pocos datos que
+        # limpiar cuando el gimnasio de muestra pasa a ser uno de verdad.
         hoy = timezone.localdate()
         demo = [
-            ('Ana Torres', hoy),                       # vigente
-            ('Luis Ramirez', hoy - timedelta(days=28)),  # por vencer
-            ('Sofia Mendez', hoy - timedelta(days=90)),  # vencida
-            ('Carlos Vega', None),                     # sin membresia
-            ('Diego Herrera', hoy - timedelta(days=5)),
-            ('Paola Nunez', hoy - timedelta(days=12)),
+            ('Ana Torres', hoy - timedelta(days=28)),   # por vencer
+            ('Luis Ramirez', hoy - timedelta(days=90)),  # vencida
         ]
         creados = []
         for nombre, inicio in demo:

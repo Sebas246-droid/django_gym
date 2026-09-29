@@ -774,6 +774,73 @@ button { font-family: inherit; }
   .lista-copiar .rotulo { flex-basis: 100%; }
 }
 
+/* --- Enrolar el rostro --------------------------------------------------- */
+
+.rejilla-rostro {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 18px;
+  align-items: start;
+}
+@media (max-width: 1000px) { .rejilla-rostro { grid-template-columns: 1fr; } }
+.rejilla-rostro .o-hoja { margin-bottom: 0; }
+
+/* El aviso se lee, no se decora: texto tal cual, con sus saltos de linea. */
+.aviso-legal {
+  font-family: var(--fuente);
+  font-size: 13px;
+  line-height: 1.55;
+  color: var(--tinta-2);
+  white-space: pre-wrap;
+  background: var(--lienzo);
+  border: 1px solid var(--borde);
+  border-radius: var(--r);
+  padding: 14px 16px;
+  max-height: 320px;
+  overflow-y: auto;
+  margin: 0 0 18px;
+}
+
+.tabla-firma {
+  width: 100%;
+  height: auto;
+  aspect-ratio: 560 / 180;
+  border: 1px dashed var(--borde-fuerte);
+  border-radius: var(--r);
+  background: var(--panel);
+  touch-action: none;   /* o el dedo arrastra la pagina en vez de firmar */
+  cursor: crosshair;
+}
+
+.marco-camara {
+  position: relative;
+  border-radius: var(--r);
+  overflow: hidden;
+  background: #17171E;
+  aspect-ratio: 4 / 3;
+  display: grid;
+  place-items: center;
+  margin-bottom: 14px;
+}
+.marco-camara video {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  /* Espejo: uno se acomoda mirandose, y sin esto los movimientos salen al reves. */
+  transform: scaleX(-1);
+}
+.marco-camara .estado {
+  position: absolute;
+  left: 12px; right: 12px; bottom: 12px;
+  margin: 0;
+  padding: 8px 12px;
+  border-radius: var(--r-sm);
+  background: rgba(11, 11, 15, .72);
+  color: #fff;
+  font-size: 12.5px;
+  text-align: center;
+}
+
 /* --- Tablas -------------------------------------------------------------- */
 
 .o-tabla-caja {
