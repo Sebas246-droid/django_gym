@@ -153,8 +153,44 @@
     </div>
 
   {% else %}
+    {% if hay_rostros %}
+      {% comment %}
+      La cara primero y en grande: el socio llega, se ve en la pantalla y entra
+      sin tocar nada. El teclado no desaparece, pasa a ser el segundo paso, y
+      es a donde cae solo cuando la camara no reconoce a nadie.
+      {% endcomment %}
+      <div class="tarjeta pantalla-rostro" id="pantalla-rostro">
+        <div class="identidad">
+          <span class="insignia">
+            {% if gym_actual.logo %}<img src="{{ gym_actual.logo.url }}" alt="">
+            {% else %}{{ gym_actual.nombre.0|upper }}{% endif %}
+          </span>
+          <span class="nombre">{{ gym_actual.nombre }}</span>
+        </div>
+
+        <h1 class="titulo">Mirate a la camara</h1>
+
+        <div class="espejo">
+          <video id="camara-kiosco" playsinline muted autoplay></video>
+          <div class="marca-rostro" id="marca-rostro"></div>
+        </div>
+
+        <p class="subtitulo" id="estado-rostro">Encendiendo la camara...</p>
+
+        <form method="post" action="{% url 'clientes:checkin_rostro' %}" id="form-rostro">
+          {% csrf_token %}
+          <input type="hidden" name="descriptor" id="campo-descriptor">
+        </form>
+
+        <button type="button" class="principal-btn secundario" id="usar-numero">
+          Entrar con mi numero
+        </button>
+      </div>
+    {% endif %}
+
     {# ---------- Teclado ---------- #}
-    <form method="post" class="tarjeta" id="form-acceso">
+    <form method="post" class="tarjeta{% if hay_rostros %} escondida{% endif %}"
+          id="form-acceso">
       {% csrf_token %}
 
       <div class="identidad">
@@ -192,29 +228,6 @@
 
       <button type="submit" class="principal-btn" id="enviar" disabled>Registrar entrada</button>
     </form>
-
-    {% if hay_rostros %}
-      {% comment %}
-      Va fuera del teclado porque son dos envios distintos. El teclado no se
-      quita nunca: si la luz esta mal o la camara falla, el numero funciona.
-      {% endcomment %}
-      <form method="post" action="{% url 'clientes:checkin_rostro' %}" class="rostro"
-            id="form-rostro">
-        {% csrf_token %}
-        <input type="hidden" name="descriptor" id="campo-descriptor">
-        <button type="button" id="boton-rostro">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"
-               stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-            <path d="M4 8V6a2 2 0 0 1 2-2h2"/><path d="M16 4h2a2 2 0 0 1 2 2v2"/>
-            <path d="M20 16v2a2 2 0 0 1-2 2h-2"/><path d="M8 20H6a2 2 0 0 1-2-2v-2"/>
-            <circle cx="9.5" cy="10.5" r="1"/><circle cx="14.5" cy="10.5" r="1"/>
-            <path d="M9 15a4 4 0 0 0 6 0"/>
-          </svg>
-          <span id="texto-rostro">O entra con tu rostro</span>
-        </button>
-      </form>
-      <video id="camara-kiosco" playsinline muted></video>
-    {% endif %}
 
   {% endif %}
 
@@ -295,47 +308,64 @@
     pintar();
   }
 
-  // Entrada por rostro. El modelo corre aqui y del servidor solo se recibe el
-  // veredicto: la foto no sale de esta tablet.
+  // Entrada por rostro: la pantalla de inicio. Busca sola, y si no reconoce a
+  // nadie manda al teclado, que es lo que siempre funciona.
   {% if hay_rostros %}
   (function () {
-    const boton = document.querySelector('#boton-rostro');
-    const texto = document.querySelector('#texto-rostro');
+    const pantalla = document.querySelector('#pantalla-rostro');
+    const teclado = document.querySelector('#form-acceso');
     const video = document.querySelector('#camara-kiosco');
+    const estado = document.querySelector('#estado-rostro');
+    const marca = document.querySelector('#marca-rostro');
     const campo = document.querySelector('#campo-descriptor');
 
-    boton.addEventListener('click', async function () {
-      boton.disabled = true;
+    //: Cuanto se insiste antes de mandar al teclado. Mas de esto y el socio
+    //: ya se canso de posar frente a una pantalla que no lo reconoce.
+    const SEGUNDOS = 12;
+    let buscando = true;
+
+    function alTeclado(porque) {
+      buscando = false;
+      Rostro.apagar(video);
+      pantalla.classList.add('escondida');
+      teclado.classList.remove('escondida');
+      const aviso = teclado.querySelector('.subtitulo');
+      if (aviso && porque) { aviso.textContent = porque; }
+      const numero = document.querySelector('#numero');
+      if (numero) { numero.focus(); }
+    }
+
+    document.querySelector('#usar-numero').addEventListener('click', function () {
+      alTeclado('Teclea tu numero de usuario.');
+    });
+
+    (async function mirar() {
       try {
-        texto.textContent = 'Cargando...';
+        estado.textContent = 'Preparando el reconocimiento...';
         await Rostro.cargar("{% static 'vendor/face-api/model/' %}");
-
-        texto.textContent = 'Mira a la camara';
         await Rostro.encender(video);
-        // Un respiro para que la camara ajuste la luz: la primera imagen
-        // suele salir oscura y ahi no se reconoce a nadie.
-        await new Promise(function (listo) { setTimeout(listo, 700); });
+      } catch (error) {
+        alTeclado('La camara no respondio. Teclea tu numero.');
+        return;
+      }
 
-        let descriptor = null;
-        for (let intento = 0; intento < 3 && !descriptor; intento += 1) {
-          descriptor = await Rostro.describir(video);
-        }
-        Rostro.apagar(video);
+      estado.textContent = 'Mirate a la camara';
+      const hasta = Date.now() + SEGUNDOS * 1000;
 
-        if (!descriptor) {
-          texto.textContent = 'No te vi. Acercate o teclea tu numero';
-          boton.disabled = false;
+      while (buscando && Date.now() < hasta) {
+        const descriptor = await Rostro.describir(video);
+        if (descriptor) {
+          marca.classList.add('visto');
+          estado.textContent = 'Te vi, un momento...';
+          campo.value = JSON.stringify(descriptor);
+          document.querySelector('#form-rostro').submit();
           return;
         }
-
-        campo.value = JSON.stringify(descriptor);
-        document.querySelector('#form-rostro').submit();
-      } catch (error) {
-        Rostro.apagar(video);
-        texto.textContent = 'La camara no respondio. Teclea tu numero';
-        boton.disabled = false;
+        await new Promise(function (listo) { setTimeout(listo, 400); });
       }
-    });
+
+      if (buscando) { alTeclado('No alcance a verte. Teclea tu numero.'); }
+    })();
   })();
   {% endif %}
 

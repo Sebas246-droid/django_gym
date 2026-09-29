@@ -225,29 +225,61 @@ a { text-decoration: none; color: inherit; }
 /* --- Entrada por rostro --------------------------------------------------- */
 
 /*
-  Mismo trato que el de huella: un boton secundario debajo del teclado. El
-  teclado manda, esto es el atajo.
-*/
-.rostro { margin-top: 16px; text-align: center; }
-.rostro button {
-  display: inline-flex;
-  align-items: center;
-  gap: 10px;
-  padding: 12px 22px;
-  border-radius: 999px;
-  border: 1px solid rgba(255, 255, 255, .16);
-  background: rgba(255, 255, 255, .05);
-  color: rgba(255, 255, 255, .8);
-  font: inherit;
-  font-size: 15px;
-  cursor: pointer;
-}
-.rostro button:hover { background: rgba(255, 255, 255, .1); color: #fff; }
-.rostro button:disabled { opacity: .6; cursor: default; }
-.rostro svg { width: 24px; height: 24px; color: var(--acento); }
+  La cara es la pantalla de inicio, no un boton al pie. El socio llega, se ve
+  en grande y entra sin tocar nada; el teclado aparece si no se le reconoce.
 
-/* La camara trabaja sin verse: el socio mira la pantalla, no su propia cara. */
-#camara-kiosco { position: absolute; width: 1px; height: 1px; opacity: 0; }
+  Verse es parte de la funcion, no un adorno: con el video escondido uno no
+  sabe si la camara lo esta agarrando, y encima el navegador puede dejar de
+  entregar cuadros de un video que no se pinta.
+*/
+.escondida { display: none !important; }
+
+.pantalla-rostro { text-align: center; }
+
+.espejo {
+  position: relative;
+  width: 100%;
+  max-width: 420px;
+  margin: 18px auto 14px;
+  aspect-ratio: 3 / 4;
+  border-radius: 24px;
+  overflow: hidden;
+  background: #101016;
+}
+.espejo video {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  /* Espejo: uno se acomoda mirandose, y sin esto se mueve al reves. */
+  transform: scaleX(-1);
+}
+
+/* El ovalo donde poner la cara. Guia sin tapar. */
+.marca-rostro {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  width: 62%;
+  aspect-ratio: 3 / 4;
+  border: 3px solid rgba(255, 255, 255, .35);
+  border-radius: 50%;
+  transition: border-color .2s ease, box-shadow .2s ease;
+}
+.marca-rostro.visto {
+  border-color: var(--acento);
+  box-shadow: 0 0 0 6px rgba(var(--acento-rgb), .18);
+}
+
+/* El paso al teclado: ahi cuando se necesita, sin competir con la cara. */
+.principal-btn.secundario {
+  background: transparent;
+  color: rgba(255, 255, 255, .72);
+  border: 1px solid rgba(255, 255, 255, .18);
+  /* Sin el resplandor del acento: es el camino de respaldo, no el principal. */
+  box-shadow: none;
+}
+.principal-btn.secundario:hover { background: rgba(255, 255, 255, .08); color: #fff; }
 
 /* --- Entrada por huella --------------------------------------------------- */
 
