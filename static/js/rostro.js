@@ -39,6 +39,13 @@ window.Rostro = (function () {
           faceapi.nets.faceLandmark68Net.loadFromUri(carpeta),
           faceapi.nets.faceRecognitionNet.loadFromUri(carpeta),
         ]);
+      }).catch(function (error) {
+        // Si fallo la descarga hay que olvidarla, o la promesa rechazada se
+        // queda guardada y todos los intentos siguientes fallan igual sin
+        // volver a intentarlo: el kiosco quedaria muerto hasta recargarlo, que
+        // es justo lo que nadie va a hacer en la entrada de un gimnasio.
+        cargado = null;
+        throw error;
       });
     }
     return cargado;
@@ -83,13 +90,20 @@ window.Rostro = (function () {
       siempre, y con el a quien quiere entrar: mejor fallar y mandarlo al
       teclado.
     */
-    await new Promise(function (listo, falla) {
-      if (video.readyState >= 2) { listo(); return; }
-      video.addEventListener('loadedmetadata', listo, { once: true });
-      setTimeout(function () {
-        falla(new Error('La camara no entrego imagen.'));
-      }, 8000);
-    });
+    try {
+      await new Promise(function (listo, falla) {
+        if (video.readyState >= 2) { listo(); return; }
+        video.addEventListener('loadedmetadata', listo, { once: true });
+        setTimeout(function () {
+          falla(new Error('La camara no entrego imagen.'));
+        }, 8000);
+      });
+    } catch (error) {
+      // Si se rinde aqui hay que soltar la camara a mano: el permiso ya se
+      // dio y la luz del aparato se quedaria encendida para siempre.
+      apagar(video);
+      throw error;
+    }
 
     // El play puede quedarse colgado segun la politica del navegador. No se
     // espera indefinidamente: con los metadatos ya hay cuadro que leer.

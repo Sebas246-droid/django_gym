@@ -329,12 +329,21 @@ buscador de "no recuerdo mi numero" si hace falta.
     //: Cuanto se insiste antes de mandar al teclado. Mas de esto y el socio
     //: ya se canso de posar frente a una pantalla que no lo reconoce.
     const SEGUNDOS = 12;
+
+    /*
+      Mientras esto sea verdad, la camara manda. Se consulta despues de CADA
+      espera, y ahi esta el detalle: encender la camara y describir una cara
+      tardan, y en ese rato el socio pudo haber tocado "entrar con mi numero".
+      Sin esta bandera pasaban dos cosas feas: la camara se encendia despues de
+      que ya la habian apagado, y un descriptor que venia en camino enviaba el
+      formulario aunque el socio hubiera pedido teclear.
+    */
     let buscando = true;
 
     function alTeclado(porque) {
       buscando = false;
-      document.body.classList.remove('modo-rostro');
       Rostro.apagar(video);
+      document.body.classList.remove('modo-rostro');
       pantalla.classList.add('escondida');
       teclado.classList.remove('escondida');
       const aviso = teclado.querySelector('.subtitulo');
@@ -347,13 +356,24 @@ buscador de "no recuerdo mi numero" si hace falta.
       alTeclado('Teclea tu numero de usuario.');
     });
 
+    // Tablet olvidada con la pantalla apagada: soltar la camara. No sirve de
+    // nada mirar lo que nadie ve, y la bateria se va igual.
+    document.addEventListener('visibilitychange', function () {
+      if (document.hidden && buscando) {
+        alTeclado('Teclea tu numero de usuario.');
+      }
+    });
+
     (async function mirar() {
       try {
         estado.textContent = 'Preparando el reconocimiento...';
         await Rostro.cargar("{% static 'vendor/face-api/model/' %}");
+        if (!buscando) { return; }
+
         await Rostro.encender(video);
+        if (!buscando) { Rostro.apagar(video); return; }
       } catch (error) {
-        alTeclado('La camara no respondio. Teclea tu numero.');
+        if (buscando) { alTeclado('La camara no respondio. Teclea tu numero.'); }
         return;
       }
 
@@ -362,10 +382,14 @@ buscador de "no recuerdo mi numero" si hace falta.
 
       while (buscando && Date.now() < hasta) {
         const descriptor = await Rostro.describir(video);
+        if (!buscando) { return; }
+
         if (descriptor) {
+          buscando = false;
           marca.classList.add('visto');
           estado.textContent = 'Te vi, un momento...';
           campo.value = JSON.stringify(descriptor);
+          Rostro.apagar(video);
           document.querySelector('#form-rostro').submit();
           return;
         }
